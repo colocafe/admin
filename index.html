@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="logo.svg">
 <meta property="og:title" content="Colo Café">
 <meta property="og:description" content="Sistema de gestión — ventas, mesas, reservas y más">
-<meta property="og:image" content="preview.jpg">
+<meta property="og:image" content="https://colocafe.github.io/admin/preview.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:type" content="website">
@@ -17,7 +17,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Colo Café">
 <meta name="twitter:description" content="Sistema de gestión — ventas, mesas, reservas y más">
-<meta name="twitter:image" content="preview.jpg">
+<meta name="twitter:image" content="https://colocafe.github.io/admin/preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
 <style>
@@ -644,10 +644,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <div class="split-track" id="split-track"></div>
         <div class="split-stats" id="split-stats"></div>
       </div>
-      <div class="chart-card">
-        <div class="chart-ttl">Ventas por categoría</div>
-        <div class="cat-rev-list" id="cat-rev"></div>
-      </div>
+
     </div>
     <div class="chart-card">
       <div class="chart-ttl">Ingeniería de menú</div>
@@ -704,15 +701,17 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         </div>
         <!-- Categorías -->
         <div id="itab-body-cats">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <input class="inv-search" style="flex:1" id="cat-search" type="search" placeholder="Buscar categoría…" oninput="renderCatMgr()">
             <button class="btn-sm primary" onclick="addCat()">+ Nueva</button>
           </div>
           <div class="cat-mgr" id="cat-mgr"></div>
         </div>
         <!-- Productos -->
         <div id="itab-body-prods" style="display:none">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-            <button class="btn-sm primary" onclick="openProdModal(null)">+ Producto</button>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <input class="inv-search" style="flex:1" id="prod-search" type="search" placeholder="Buscar producto…" oninput="renderMenuAdm()">
+            <button class="btn-sm primary" onclick="openProdRapidoModal('ajustes')">+ Producto</button>
           </div>
           <div id="menu-adm"></div>
         </div>
@@ -1920,12 +1919,7 @@ function renderDashboard(){
     <div class="split-stat"><div class="split-lbl"><span class="sdot" style="background:var(--orange)"></span>Efectivo</div><div class="split-pct">${pE}%</div><div class="split-monto">${fmt(ef)}</div></div>
     <div class="split-stat"><div class="split-lbl"><span class="sdot" style="background:var(--orange-mid)"></span>Mercado Pago</div><div class="split-pct">${100-pE}%</div><div class="split-monto">${fmt(mp)}</div></div>`;
 
-  // Ventas por cat
-  const catRev={};vh.forEach(v=>{catRev[v.cat]=(catRev[v.cat]||0)+v.total;});
-  const catData=Object.entries(catRev).sort((a,b)=>b[1]-a[1]);const maxT=catData[0]?.[1]||1;
-  $('cat-rev').innerHTML=catData.length?catData.map(([c,t])=>{const cat=getCat(c);return`<div class="cat-rev-row"><div class="cdot2" style="background:${cat.color}"></div><span class="cat-rev-name">${cat.name}</span>
-    <div class="cat-bar-bg"><div class="cat-bar-fill" style="width:${Math.round(t/maxT*100)}%;background:${cat.color}"></div></div>
-    <span class="cat-rev-monto">${fmt(t)}</span></div>`;}).join(''):'<div style="font-size:12px;color:var(--ink3);text-align:center;padding:12px">Sin datos</div>';
+  // Ventas por categoría eliminada del dashboard
 
   // Ingeniería de menú
   const prodStats={};vh.forEach(v=>{if(!prodStats[v.producto])prodStats[v.producto]={nombre:v.producto,qty:0,rev:0,cat:v.cat};prodStats[v.producto].qty+=v.cantidad;prodStats[v.producto].rev+=v.total;});
@@ -2056,24 +2050,20 @@ function renderAjustes(){
 }
 function renderCatMgr(){
   const el=$('cat-mgr');if(!el)return;
-  const sorted=[...cats].map((c,i)=>({...c,_i:i})).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  const q=($('cat-search')?.value||'').toLowerCase();
+  const sorted=[...cats].map((c,i)=>({...c,_i:i})).sort((a,b)=>a.name.localeCompare(b.name,'es'))
+    .filter(c=>!q||c.name.toLowerCase().includes(q));
+  if(!sorted.length){el.innerHTML='<div class="empty">Sin resultados</div>';return;}
   el.innerHTML=sorted.map(c=>`
-    <div>
-      <div class="cat-mgr-row">
-        <div class="cat-swatch" style="background:${c.color}" onclick="toggleCP(${c._i})"></div>
-        <input class="cat-name-in" value="${c.name}" onchange="renameCat(${c._i},this.value)" onblur="renameCat(${c._i},this.value)">
-        <select class="cat-seccion-sel" onchange="setSeccion(${c._i},this.value)">
-          <option value="cafeteria"${c.seccion==='cafeteria'?' selected':''}>☕ Cafetería</option>
-          <option value="cocina"${c.seccion==='cocina'?' selected':''}>🍳 Cocina</option>
-        </select>
-        <label class="cat-reserva-toggle" title="Aparece en Reservas">
-          <input type="checkbox" ${c.reservable?'checked':''} onchange="setCatReservable(${c._i},this.checked)"> 📋
-        </label>
-        <button class="cat-del" onclick="pedirConfirm('¿Eliminar categoría ${c.name}?',()=>deleteCat(${c._i}))">×</button>
+    <div class="cat-mgr-row">
+      <div class="cat-swatch" style="background:${c.color}" onclick="toggleCP(${c._i})"></div>
+      <span style="flex:1;font-size:13px;font-weight:500">${c.name}</span>
+      <span style="font-size:11px;color:var(--ink3)">${c.seccion==='cafeteria'?'☕':'🍳'}</span>
+      ${c.reservable?'<span style="font-size:11px;color:var(--ink3)" title="Permite reserva">📋</span>':'<span style="width:18px"></span>'}
+      <div class="icon-btn" onclick="openCatModal(${c._i})" title="Editar">
+        <svg viewBox="0 0 16 16" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2l3 3L5 14H2v-3L11 2z"/></svg>
       </div>
-      <div class="color-picker-wrap" id="cp-${c._i}">
-        <div class="color-dots">${PRESET_COLORS.map(col=>`<div class="cdot${c.color===col?' sel':''}" style="background:${col}" onclick="setCatColor(${c._i},'${col}')"></div>`).join('')}</div>
-      </div>
+      <button class="cat-del" onclick="pedirConfirm('¿Eliminar ${c.name}?',()=>deleteCat(${c._i}))">×</button>
     </div>`).join('');
 }
 function toggleCP(i){document.querySelectorAll('.color-picker-wrap').forEach((el,j)=>{if(j!==i)el.classList.remove('open');});document.getElementById('cp-'+i)?.classList.toggle('open');}
@@ -2097,7 +2087,10 @@ function toggleProdIlimitado(id,checked){const p=menu.find(x=>x.id===id);if(!p)r
 
 function renderMenuAdm(){
   const el=$('menu-adm');if(!el)return;
-  const sorted=[...menu].sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  const q=($('prod-search')?.value||'').toLowerCase();
+  const sorted=[...menu].sort((a,b)=>a.name.localeCompare(b.name,'es'))
+    .filter(p=>!q||p.name.toLowerCase().includes(q));
+  if(!sorted.length){el.innerHTML=menu.length?'<div class="empty">Sin resultados</div>':'<div class="empty">No hay productos</div>';return;}
   el.innerHTML=sorted.map(p=>{const cat=getCat(p.cat);return`<div class="prod-adm-row">
     <div style="width:8px;height:8px;border-radius:50%;background:${cat.color};flex-shrink:0"></div>
     <span class="prod-adm-nombre">${p.name}</span>
@@ -2108,9 +2101,10 @@ function renderMenuAdm(){
       <button class="qty-btn" onclick="adjProdStock(${p.id},1)">+</button>
     </div>
     <label class="ilim-toggle"><input type="checkbox" ${p.ilimitado?'checked':''} onchange="toggleProdIlimitado(${p.id},this.checked)"> ∞</label>
-    <div class="icon-btn" onclick="openProdModal(${p.id})">
+    <div class="icon-btn" onclick="openProdModal(${p.id})" title="Editar">
       <svg viewBox="0 0 16 16" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2l3 3L5 14H2v-3L11 2z"/></svg>
     </div>
+    <button class="cat-del" onclick="pedirEliminarProductoInline(${p.id})" title="Eliminar">×</button>
   </div>`;}).join('');
 }
 
@@ -2301,7 +2295,16 @@ function selNuevaCatColor(col){
   ).join('');
 }
 
-function cerrarModalNuevaCat(){ $('modal-nueva-cat').classList.remove('open'); }
+function cerrarModalNuevaCat(){
+  $('modal-nueva-cat').classList.remove('open');
+  // Restore default button in case it was changed by edit mode
+  setTimeout(()=>{
+    const actionsEl=$('modal-nueva-cat').querySelector('.modal-actions');
+    if(actionsEl&&!actionsEl.innerHTML.includes('guardarNuevaCat')){
+      actionsEl.innerHTML=`<button class="btn-cancel" onclick="cerrarModalNuevaCat()">Cancelar</button><button class="btn-save" onclick="guardarNuevaCat()">Crear categoría</button>`;
+    }
+  },300);
+}
 function closeModalNuevaCat(e){ if(e.target===$('modal-nueva-cat')) cerrarModalNuevaCat(); }
 
 function guardarNuevaCat(){
@@ -2322,7 +2325,7 @@ function guardarNuevaCat(){
   showToast(`✓ Categoría "${nombre}" creada`);
 
   // Retornar al contexto original
-  if(_nuevaCatRetorno === 'producto' || _nuevaCatRetorno === 'ajustes-prod-modal'){
+  if(_nuevaCatRetorno === 'producto' || _nuevaCatRetorno === 'ajustes-prod-modal' || _nuevaCatRetorno === 'prod-modal'){
     // Reopen product modal with snapshot
     if(_prodSnapshot){
       const snap = _prodSnapshot; _prodSnapshot = null;
@@ -2349,6 +2352,48 @@ function guardarNuevaCat(){
   } else {
     // 'ajustes' — just stay on cat list (already rendered)
   }
+}
+
+
+// ── Editar categoría desde lista ──────────────────
+function openCatModal(i){
+  const c=cats[i]; if(!c)return;
+  // Reuse modal-nueva-cat for editing
+  _nuevaCatRetorno='ajustes-edit-'+i;
+  _nuevaCatColorSel=c.color;
+  $('nueva-cat-nombre').value=c.name;
+  $('nueva-cat-seccion').value=c.seccion||'cafeteria';
+  $('nueva-cat-reservable').checked=!!c.reservable;
+  $('nueva-cat-colors').innerHTML=PRESET_COLORS.map(col=>
+    `<div class="cdot${col===_nuevaCatColorSel?' sel':''}" style="background:${col}" onclick="selNuevaCatColor('${col}')"></div>`
+  ).join('');
+  // Change save button label
+  const actionsEl=$('modal-nueva-cat').querySelector('.modal-actions');
+  if(actionsEl) actionsEl.innerHTML=`<button class="btn-cancel" onclick="cerrarModalNuevaCat()">Cancelar</button><button class="btn-save" onclick="guardarEditCat(${i})">Guardar</button>`;
+  $('modal-nueva-cat').classList.add('open');
+  setTimeout(()=>$('nueva-cat-nombre').focus(),120);
+}
+
+function guardarEditCat(i){
+  const nombre=($('nueva-cat-nombre').value||'').trim();
+  if(!nombre){showToast('Ingresá un nombre');return;}
+  cats[i].name=nombre;
+  cats[i].color=_nuevaCatColorSel;
+  cats[i].seccion=$('nueva-cat-seccion').value;
+  cats[i].reservable=$('nueva-cat-reservable').checked;
+  save();cerrarModalNuevaCat();renderCatMgr();renderCargaCats();
+  // Restore save button for nueva-cat
+  const actionsEl=$('modal-nueva-cat').querySelector('.modal-actions');
+  if(actionsEl) actionsEl.innerHTML=`<button class="btn-cancel" onclick="cerrarModalNuevaCat()">Cancelar</button><button class="btn-save" onclick="guardarNuevaCat()">Crear categoría</button>`;
+  showToast('✓ Categoría actualizada');
+}
+
+// ── Eliminar producto desde lista (sin abrir modal) ──
+function pedirEliminarProductoInline(id){
+  const p=menu.find(x=>x.id===id);if(!p)return;
+  pedirConfirm(`¿Eliminar "${p.name}"?`,()=>{
+    menu=menu.filter(x=>x.id!==id);save();renderMenuAdm();renderProdGrid();syncMenuSheets();showToast('✓ Producto eliminado');
+  });
 }
 
 // ══════════════════════════════════════════════════
