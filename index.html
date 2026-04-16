@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
 <style>
+
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
   --bg:#FDF6EE; --surf:#FFFFFF; --surf2:#F5EDE0; --surf3:#EDE3D4;
@@ -420,6 +421,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .cliente-search-bar{padding:12px;position:sticky;top:calc(var(--header-h));background:var(--bg);z-index:50;border-bottom:1px solid var(--border)}
 .clientes-lista{padding:12px;max-width:900px;margin:0 auto}
 
+</style>
 </head>
 <body>
 
@@ -1352,7 +1354,10 @@ function confirmarNuevaMesa(){
   const m={id:'m_'+Date.now(),nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',apertura:nowISO()};
   mesas.push(m); save(); cerrarModalNuevaMesa(); abrirMesa(m.id);
 }
-$('nueva-mesa-input').addEventListener('keydown',e=>{ if(e.key==='Enter') confirmarNuevaMesa(); });
+document.addEventListener('DOMContentLoaded', () => {
+  const mInput = $('nueva-mesa-input');
+  if(mInput) mInput.addEventListener('keydown', e=>{ if(e.key==='Enter') confirmarNuevaMesa(); });
+});
 
 function pedirEliminarMesa(id){
   const m=mesas.find(x=>x.id===id); if(!m) return;
