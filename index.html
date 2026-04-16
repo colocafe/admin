@@ -309,7 +309,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
       <div class="gs-dot" id="gs-dot"></div>
       <span id="gs-txt">Sin conexión</span>
     </div>
-    <div class="gear-btn" id="gear-btn" title="Configuración" onclick="openSheetsModal()">⚙️</div>
+
   </div>
 </div>
 
@@ -422,23 +422,35 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
         </div>
         <div class="cat-mgr" id="cat-mgr"></div>
       </div>
-      <!-- Menú -->
+      <!-- Productos (sin botón +Agregar) -->
       <div class="cfg-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div class="cfg-title" style="margin:0">Productos</div>
-          <button class="btn-sm primary" onclick="openProdModal(null)">+ Agregar</button>
-        </div>
+        <div class="cfg-title" style="margin-bottom:12px">Productos</div>
         <div id="menu-adm"></div>
       </div>
-      <!-- Guía Sheets -->
+      <!-- Conexión Google Sheets -->
       <div class="cfg-card">
-        <div class="cfg-title">Cómo conectar Google Sheets</div>
-        <div class="guide-steps">
-          <div class="guide-step"><div class="guide-num">1</div><div class="guide-txt">Crear un Google Sheet nuevo. Hojas: <code>Ventas</code> y <code>Menu</code>.</div></div>
-          <div class="guide-step"><div class="guide-num">2</div><div class="guide-txt">Hoja <code>Ventas</code> fila 1: <code>Fecha | Hora | Producto | Categoría | Cantidad | Precio | Total | Pago | Detalle</code></div></div>
-          <div class="guide-step"><div class="guide-num">3</div><div class="guide-txt">Ir a <strong>Extensiones → Apps Script</strong>, pegar el código del archivo <code>apps-script.gs</code> y publicar como Web App (acceso: Anyone).</div></div>
-          <div class="guide-step"><div class="guide-num">4</div><div class="guide-txt">Hacer click en el ⚙️ del header, pegar la URL de la Web App y el ID del Sheet, y guardar.</div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="cfg-title" style="margin:0">Conexión Google Sheets</div>
+          <div class="gs-pill" style="cursor:default">
+            <div class="gs-dot" id="gs-dot2"></div>
+            <span id="gs-txt2">—</span>
+          </div>
         </div>
+        <div class="modal-field" style="margin-bottom:12px">
+          <label class="modal-lbl">ID del Spreadsheet</label>
+          <input class="cfg-input" id="cfg-sheet-adj" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
+        </div>
+        <div class="modal-field" style="margin-bottom:14px">
+          <label class="modal-lbl">Web App URL (Apps Script)</label>
+          <input class="cfg-input" id="cfg-url-adj" placeholder="https://script.google.com/macros/s/…">
+        </div>
+        <button class="btn-cfg" onclick="guardarConfigAdj()">Guardar y conectar</button>
+      </div>
+      <!-- Datos -->
+      <div class="cfg-card">
+        <div class="cfg-title" style="margin-bottom:10px">Datos locales</div>
+        <p style="font-size:12px;color:var(--ink2);margin-bottom:12px;line-height:1.5">Borrá los datos de ventas e historial locales. El stock y menú no se ven afectados.</p>
+        <button class="btn-sm" style="color:var(--red);border-color:rgba(176,48,48,.3)" onclick="limpiarVentas()">🗑 Limpiar ventas e historial</button>
       </div>
     </div>
   </div>
@@ -490,7 +502,10 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
       </div>
       <div class="modal-field">
         <label class="modal-lbl">Categoría</label>
-        <select class="modal-select" id="m-cat"></select>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="modal-select" id="m-cat" style="flex:1"></select>
+          <button class="btn-sm primary" onclick="addCatFromModal()" title="Nueva categoría" style="flex-shrink:0;padding:7px 10px">+</button>
+        </div>
       </div>
     </div>
     <div class="modal-2col">
@@ -503,7 +518,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
         <input class="modal-input" id="m-alerta" type="number" placeholder="5" min="0">
       </div>
     </div>
-    <div class="modal-actions">
+    <div class="modal-actions" id="prod-modal-actions">
       <button class="btn-cancel" onclick="closeProdModal()">Cancelar</button>
       <button class="btn-save" onclick="guardarProducto()">Guardar</button>
     </div>
@@ -511,6 +526,35 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- MODAL: NUEVA MESA -->
+<div class="modal-ov" id="modal-nueva-mesa" onclick="closeModalNuevaMesa(event)">
+  <div class="modal-box" style="position:relative">
+    <div class="modal-close" onclick="cerrarModalNuevaMesa()">×</div>
+    <div class="modal-title">Nueva mesa</div>
+    <div class="modal-field" style="margin-bottom:18px">
+      <label class="modal-lbl">Nombre</label>
+      <input class="modal-input" id="nueva-mesa-input" type="text" placeholder="Mesa 3, Para llevar, Delivery…" maxlength="40">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cerrarModalNuevaMesa()">Cancelar</button>
+      <button class="btn-save" onclick="confirmarNuevaMesa()">Abrir mesa</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMAR ELIMINAR MESA -->
+<div class="modal-ov" id="modal-eliminar-mesa" onclick="closeModalEliminarMesa(event)">
+  <div class="modal-box" style="position:relative">
+    <div class="modal-close" onclick="cerrarModalEliminarMesa()">×</div>
+    <div class="modal-title">Eliminar mesa</div>
+    <p style="font-size:14px;color:var(--ink2);margin-bottom:20px;line-height:1.5">¿Eliminar <strong id="eliminar-mesa-nombre"></strong>? Se perderán los ítems del pedido.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cerrarModalEliminarMesa()">Cancelar</button>
+      <button class="btn-save" style="background:var(--red)" onclick="confirmarEliminarMesa()">Eliminar</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ══════════════════════════════════════════════════
@@ -565,7 +609,7 @@ let cats   = JSON.parse(localStorage.getItem('cats')||'null')||DEFAULT_CATS;
 let menu   = JSON.parse(localStorage.getItem('menu')||'null')||DEFAULT_MENU;
 let ventas = JSON.parse(localStorage.getItem('ventas')||'[]');
 let config = JSON.parse(localStorage.getItem('config')||'{}');
-let mesas  = JSON.parse(localStorage.getItem('mesas')||'[]'); // [{id, nombre, items:{id:qty}, pago, apertura}]
+let mesas  = JSON.parse(localStorage.getItem('mesas')||'[]');
 
 // Migrate: ensure all products have name, price, stock, alert
 menu = menu.map(p=>({
@@ -576,13 +620,14 @@ menu = menu.map(p=>({
   alert: p.alert ?? 5
 }));
 
-let carrito  = {};   // {id: qty} — carrito de la mesa activa
-let pago     = 'ef';
-let catCarga = 'todos';
-let catInv   = 'todos';
-let editId   = null;
+let carrito      = {};
+let pago         = 'ef';
+let catCarga     = 'todos';
+let catInv       = 'todos';
+let editId       = null;
 let activeTab    = 'carga';
-let mesaActivaId = null;  // id de la mesa en edición
+let mesaActivaId = null;
+let mesaParaEliminar = null;
 
 function save(){
   localStorage.setItem('cats',   JSON.stringify(cats));
@@ -596,6 +641,11 @@ function save(){
 // ══════════════════════════════════════════════════
 const $  = id => document.getElementById(id);
 const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
+const fmtK = n => {
+  if(n>=1000000) return '$'+(n/1000000).toFixed(1).replace('.0','')+'M';
+  if(n>=1000)    return '$'+(n/1000).toFixed(0)+'k';
+  return '$'+Math.round(n);
+};
 
 function fmtFull(d){
   const dias=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
@@ -652,38 +702,6 @@ function goTab(id){
 }
 
 // ══════════════════════════════════════════════════
-//  SHEETS MODAL
-// ══════════════════════════════════════════════════
-function openSheetsModal(){
-  if(config.sheetId)  $('cfg-sheet').value=config.sheetId;
-  if(config.webappUrl) $('cfg-url').value=config.webappUrl;
-  $('modal-sheets').classList.add('open');
-  setTimeout(()=>$('cfg-url').focus(), 100);
-}
-function closeSheetsModal(){ $('modal-sheets').classList.remove('open'); }
-function closeModalSheets(e){ if(e.target===$('modal-sheets')) closeSheetsModal(); }
-
-function guardarConfig(){
-  config={sheetId:$('cfg-sheet').value.trim(), webappUrl:$('cfg-url').value.trim()};
-  localStorage.setItem('config',JSON.stringify(config));
-  closeSheetsModal();
-  renderSetupBanner();
-  showToast('✓ Configuración guardada');
-  syncMenuSheets(); // sync menu al conectar
-}
-function renderSetupBanner(){
-  if(config.webappUrl){
-    $('setup-banner').innerHTML='';
-    $('gs-dot').classList.add('on');
-    $('gs-txt').textContent='Sheets';
-  } else {
-    $('setup-banner').innerHTML=`<div class="setup-banner" onclick="openSheetsModal()">⚡ Conectá Google Sheets para guardar en la nube — click aquí para configurar</div>`;
-    $('gs-dot').classList.remove('on');
-    $('gs-txt').textContent='Sin conexión';
-  }
-}
-
-// ══════════════════════════════════════════════════
 //  SHEETS SYNC
 // ══════════════════════════════════════════════════
 async function sheetsPost(payload){
@@ -698,32 +716,67 @@ async function sheetsPost(payload){
     return true;
   }catch(e){ return false; }
 }
+async function syncVentasSheets(rows){ await sheetsPost({action:'addVentas', rows}); }
+async function syncStockSheets(){ await sheetsPost({action:'updateStock', rows:menu.map(p=>({id:p.id,name:p.name,cat:getCat(p.cat).name,stock:p.stock,price:p.price}))}); }
+async function syncMenuSheets(){ await sheetsPost({action:'updateMenu', rows:menu.map(p=>({id:p.id,name:p.name,cat:getCat(p.cat).name,stock:p.stock,price:p.price,alert:p.alert}))}); }
 
-async function syncVentasSheets(rows){
-  const ok = await sheetsPost({action:'addVentas', rows});
-  if(ok) $('gs-dot').classList.add('on');
+// ══════════════════════════════════════════════════
+//  CONFIG (en Ajustes)
+// ══════════════════════════════════════════════════
+function renderSetupBanner(){
+  const connected = !!config.webappUrl;
+  // pill en header
+  $('gs-dot').classList.toggle('on', connected);
+  $('gs-txt').textContent = connected ? 'Sheets' : 'Sin conexión';
+  // pill en ajustes (si existe)
+  const d2=$('gs-dot2'), t2=$('gs-txt2');
+  if(d2){ d2.classList.toggle('on', connected); t2.textContent = connected ? 'Conectado' : 'Sin conexión'; }
+  // banner setup
+  if($('setup-banner')){
+    $('setup-banner').innerHTML = connected ? '' :
+      `<div class="setup-banner" onclick="goTab('ajustes')">⚡ Conectá Google Sheets para guardar en la nube — ir a Ajustes</div>`;
+  }
 }
 
-async function syncStockSheets(){
-  const rows = menu.map(p=>({id:p.id, name:p.name, cat:getCat(p.cat).name, stock:p.stock, price:p.price}));
-  await sheetsPost({action:'updateStock', rows});
+function guardarConfigAdj(){
+  const sheetId = $('cfg-sheet-adj').value.trim();
+  const webappUrl = $('cfg-url-adj').value.trim();
+  if(!webappUrl){ showToast('Pegá la URL de la Web App'); return; }
+  config = {sheetId, webappUrl};
+  localStorage.setItem('config', JSON.stringify(config));
+  renderSetupBanner();
+  showToast('✓ Configuración guardada');
+  syncMenuSheets();
 }
 
-async function syncMenuSheets(){
-  const rows = menu.map(p=>({id:p.id, name:p.name, cat:getCat(p.cat).name, stock:p.stock, price:p.price, alert:p.alert}));
-  await sheetsPost({action:'updateMenu', rows});
+function renderAjustesConfig(){
+  if($('cfg-sheet-adj') && config.sheetId)  $('cfg-sheet-adj').value = config.sheetId;
+  if($('cfg-url-adj')   && config.webappUrl) $('cfg-url-adj').value   = config.webappUrl;
+}
+
+// ══════════════════════════════════════════════════
+//  LIMPIAR VENTAS (botón actualizar)
+// ══════════════════════════════════════════════════
+function limpiarVentas(){
+  if(!confirm('¿Limpiar todo el historial local de ventas? El stock y menú no se ven afectados.')) return;
+  ventas = [];
+  save();
+  renderDashboard();
+  renderHistorial();
+  showToast('✓ Historial limpiado');
 }
 
 // ══════════════════════════════════════════════════
 //  STOCK ALERTS
 // ══════════════════════════════════════════════════
 function renderStockAlerts(){
+  const el = $('stock-alerts'); if(!el) return;
   const out=menu.filter(p=>p.stock<=0);
   const low=menu.filter(p=>p.stock>0&&p.stock<=p.alert);
   let h='';
   if(out.length) h+=`<div class="alert-banner crit">⛔ Sin stock: ${out.map(p=>p.name).join(', ')}</div>`;
   if(low.length) h+=`<div class="alert-banner">⚠️ Stock bajo: ${low.map(p=>`${p.name} (${p.stock})`).join(', ')}</div>`;
-  $('stock-alerts').innerHTML=h;
+  el.innerHTML=h;
 }
 
 // ══════════════════════════════════════════════════
@@ -750,17 +803,47 @@ function renderMesas(){
       <div class="mesa-nombre">${m.nombre}</div>
       <div class="mesa-items">${itemCount} ítem${itemCount!==1?'s':''}</div>
       <div class="mesa-total">${fmt(total)}</div>
-      <div class="mesa-close" onclick="event.stopPropagation();eliminarMesa('${m.id}')" title="Eliminar mesa">×</div>
+      <div class="mesa-close" onclick="event.stopPropagation();pedirEliminarMesa('${m.id}')" title="Eliminar mesa">×</div>
     </div>`;
   }).join('');
 }
 
+// Modal nueva mesa
 function abrirNuevaMesa(){
-  const nombre=prompt('Nombre de la mesa (ej: Mesa 3, Para llevar, Delivery…)','');
-  if(!nombre||!nombre.trim()) return;
-  const m={id:'m_'+Date.now(), nombre:nombre.trim(), items:{}, pago:'ef', apertura:new Date().toISOString()};
+  $('nueva-mesa-input').value='';
+  $('modal-nueva-mesa').classList.add('open');
+  setTimeout(()=>$('nueva-mesa-input').focus(), 120);
+}
+function cerrarModalNuevaMesa(){ $('modal-nueva-mesa').classList.remove('open'); }
+function closeModalNuevaMesa(e){ if(e.target===$('modal-nueva-mesa')) cerrarModalNuevaMesa(); }
+function confirmarNuevaMesa(){
+  const nombre=$('nueva-mesa-input').value.trim();
+  if(!nombre){ showToast('Ingresá un nombre para la mesa'); return; }
+  const m={id:'m_'+Date.now(), nombre, items:{}, pago:'ef', apertura:new Date().toISOString()};
   mesas.push(m); save();
+  cerrarModalNuevaMesa();
   abrirMesa(m.id);
+}
+// Enter en input abre mesa
+document.addEventListener('DOMContentLoaded', ()=>{
+  $('nueva-mesa-input').addEventListener('keydown', e=>{ if(e.key==='Enter') confirmarNuevaMesa(); });
+});
+
+// Modal eliminar mesa
+function pedirEliminarMesa(id){
+  const m=mesas.find(x=>x.id===id); if(!m) return;
+  mesaParaEliminar=id;
+  $('eliminar-mesa-nombre').textContent=m.nombre;
+  $('modal-eliminar-mesa').classList.add('open');
+}
+function cerrarModalEliminarMesa(){ $('modal-eliminar-mesa').classList.remove('open'); mesaParaEliminar=null; }
+function closeModalEliminarMesa(e){ if(e.target===$('modal-eliminar-mesa')) cerrarModalEliminarMesa(); }
+function confirmarEliminarMesa(){
+  if(!mesaParaEliminar) return;
+  mesas=mesas.filter(m=>m.id!==mesaParaEliminar); save();
+  cerrarModalEliminarMesa();
+  renderMesas();
+  showToast('Mesa eliminada');
 }
 
 function abrirMesa(id){
@@ -778,19 +861,11 @@ function abrirMesa(id){
 }
 
 function volverAMesas(){
-  // Guardar estado de carrito en la mesa
   if(mesaActivaId){
     const m=mesas.find(x=>x.id===mesaActivaId);
-    if(m){ m.items=Object.keys(carrito).length>0?{...carrito}:m.items; m.pago=pago; save(); }
+    if(m){ m.items={...carrito}; m.pago=pago; save(); }
   }
   renderMesas();
-}
-
-function eliminarMesa(id){
-  if(!confirm('¿Eliminar esta mesa?')) return;
-  mesas=mesas.filter(m=>m.id!==id); save();
-  renderMesas();
-  showToast('Mesa eliminada');
 }
 
 async function cerrarMesa(){
@@ -804,31 +879,29 @@ async function cerrarMesa(){
     const p=menu.find(x=>x.id==id);
     return {fecha,hora,producto:p.name,categoria:getCat(p.cat).name,cantidad:qty,precio:p.price,total:p.price*qty,pago,detalle:m?m.nombre:'',cat:p.cat};
   });
-  // Descontar stock
   items.forEach(([id,qty])=>{
     const p=menu.find(x=>x.id==id);
     if(p) p.stock=Math.max(0,p.stock-qty);
   });
   ventas.push(...nuevas);
-  // Cerrar mesa
   mesas=mesas.filter(x=>x.id!==mesaActivaId);
   save();
-  // Sync Sheets
   const syncOk = await syncVentasSheets(nuevas);
-  syncStockSheets(); // fire & forget stock update
+  syncStockSheets();
   if(syncOk) showToast('✓ Venta guardada en Sheets');
   else if(config.webappUrl) showToast('✓ Venta registrada (sin internet)');
-  else showToast('✓ Venta registrada — '+pago);
+  else showToast('✓ Venta registrada — '+(pago==='ef'?'Efectivo':'Mercado Pago'));
   btn.disabled=false; btn.textContent='Cerrar y cobrar';
   renderMesas();
 }
 
 // ══════════════════════════════════════════════════
-//  CARGA (producto grid dentro de una mesa)
+//  CARRITO (dentro de una mesa)
 // ══════════════════════════════════════════════════
 function renderCargaCats(){
+  const el=$('carga-cats'); if(!el) return;
   const all=[{id:'todos',name:'Todos',color:'#888'},...cats];
-  $('carga-cats').innerHTML=all.map(c=>`
+  el.innerHTML=all.map(c=>`
     <div class="chip${catCarga===c.id?' active':''}" onclick="setCargaCat('${c.id}')">
       ${c.id!=='todos'?`<span class="chip-dot" style="background:${c.color}"></span>`:''}${c.name}
     </div>`).join('');
@@ -836,9 +909,10 @@ function renderCargaCats(){
 function setCargaCat(id){ catCarga=id; renderCargaCats(); renderProdGrid(); }
 
 function renderProdGrid(){
+  const el=$('prod-grid'); if(!el) return;
   const list = catCarga==='todos' ? menu : menu.filter(p=>p.cat===catCarga);
-  if(!list.length){ $('prod-grid').innerHTML='<div class="empty">No hay productos en esta categoría</div>'; return; }
-  $('prod-grid').innerHTML=list.map(p=>{
+  if(!list.length){ el.innerHTML='<div class="empty">No hay productos en esta categoría</div>'; return; }
+  el.innerHTML=list.map(p=>{
     const qty=carrito[p.id]||0;
     const st=stockStatus(p);
     const cat=getCat(p.cat);
@@ -859,7 +933,6 @@ function addItem(id){
   const cur=carrito[id]||0;
   if(cur>=p.stock){ showToast(`Solo quedan ${p.stock} unidades de ${p.name}`); return; }
   carrito[id]=cur+1;
-  // Guardar parcial en la mesa
   if(mesaActivaId){ const m=mesas.find(x=>x.id===mesaActivaId); if(m){ m.items={...carrito}; save(); } }
   renderProdGrid(); renderCart();
 }
@@ -921,14 +994,18 @@ function renderDashboard(){
     <div class="kpi"><div class="kpi-lbl">Transacciones</div><div class="kpi-val">${txHoy}</div><div class="kpi-sub">prom. ${fmt(prom)}</div></div>
     <div class="kpi"><div class="kpi-lbl">Mejor día</div><div class="kpi-val">Sáb</div><div class="kpi-sub">$142.000 prom.</div></div>
     <div class="kpi"><div class="kpi-lbl">Mes actual</div><div class="kpi-val">$1,8M</div><div class="kpi-sub kpi-up">+8% vs anterior</div></div>`;
+
+  // Bar chart con montos visibles
   const sem=[62000,95000,41000,88000,76000,142000,totalHoy];
   const lbls=['L','M','X','J','V','S','Hoy'];
   const maxV=Math.max(...sem);
   $('bar-semana').innerHTML=sem.map((v,i)=>`
-    <div class="bar-col">
-      <div class="bar-fill${i===6?' today':v===maxV?' hi':''}" style="height:${Math.round(v/maxV*68)}px"></div>
+    <div class="bar-col" style="gap:3px">
+      <span class="bar-monto" style="font-size:9px;color:var(--ink3);text-align:center;line-height:1">${fmtK(v)}</span>
+      <div class="bar-fill${i===6?' today':v===maxV?' hi':''}" style="height:${Math.round(v/maxV*60)}px"></div>
       <span class="bar-lbl">${lbls[i]}</span>
     </div>`).join('');
+
   const conteo={};
   vh.forEach(v=>{conteo[v.producto]=(conteo[v.producto]||0)+v.cantidad});
   const dTop=[{n:'Latte',c:14},{n:'Cappuccino',c:11},{n:'Croissant',c:9},{n:'Salto de Fe',c:7},{n:'Sandwich pollo',c:5}];
@@ -938,6 +1015,7 @@ function renderDashboard(){
     <div class="top-row"><span class="top-rank">${i+1}</span><span class="top-name">${t.n}</span>
     <div class="top-bar-bg"><div class="top-bar-fill" style="width:${Math.round(t.c/maxC*100)}%"></div></div>
     <span class="top-cnt">${t.c} ud.</span></div>`).join('');
+
   const ef=vh.filter(v=>v.pago==='ef').reduce((s,v)=>s+v.total,0)||50692;
   const mp=vh.filter(v=>v.pago==='mp').reduce((s,v)=>s+v.total,0)||36708;
   const tot=ef+mp, pE=Math.round(ef/tot*100), pM=100-pE;
@@ -945,6 +1023,7 @@ function renderDashboard(){
   $('split-stats').innerHTML=`
     <div class="split-stat"><div class="split-lbl"><span class="sdot" style="background:var(--orange)"></span>Efectivo</div><div class="split-pct">${pE}%</div><div class="split-monto">${fmt(ef)}</div></div>
     <div class="split-stat"><div class="split-lbl"><span class="sdot" style="background:var(--orange-mid)"></span>Mercado Pago</div><div class="split-pct">${pM}%</div><div class="split-monto">${fmt(mp)}</div></div>`;
+
   const catRev={};
   vh.forEach(v=>{catRev[v.cat]=(catRev[v.cat]||0)+v.total});
   const dCats=[{cat:'cafe',t:38200},{cat:'comida',t:28600},{cat:'cerv',t:12400},{cat:'beb',t:8200}];
@@ -1058,7 +1137,12 @@ function setStock(id,val){
 // ══════════════════════════════════════════════════
 //  AJUSTES
 // ══════════════════════════════════════════════════
-function renderAjustes(){ renderCatMgr(); renderMenuAdm(); }
+function renderAjustes(){
+  renderCatMgr();
+  renderMenuAdm();
+  renderAjustesConfig();
+  renderSetupBanner();
+}
 
 // ── CATEGORÍAS ──
 function renderCatMgr(){
@@ -1108,6 +1192,18 @@ function addCat(){
   },50);
 }
 
+// Nueva cat desde modal producto
+function addCatFromModal(){
+  const nombre=prompt('Nombre de la nueva categoría:','');
+  if(!nombre||!nombre.trim()) return;
+  const id='cat_'+Date.now();
+  cats.push({id,name:nombre.trim(),color:PRESET_COLORS[cats.length%PRESET_COLORS.length]});
+  save();
+  populateCatSelect();
+  $('m-cat').value=id;
+  showToast(`✓ Categoría "${nombre.trim()}" creada`);
+}
+
 // ── MENU ADMIN ──
 function renderMenuAdm(){
   $('menu-adm').innerHTML=menu.map(p=>{
@@ -1125,13 +1221,15 @@ function renderMenuAdm(){
 }
 
 // ══════════════════════════════════════════════════
-//  MODAL PRODUCTO
+//  MODAL PRODUCTO (con eliminar)
 // ══════════════════════════════════════════════════
 function populateCatSelect(){
   $('m-cat').innerHTML=cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
 }
 function openProdModal(id){
   editId=id; populateCatSelect();
+  // Mostrar/ocultar botón eliminar
+  const actions=$('prod-modal-actions');
   if(id){
     const p=menu.find(x=>x.id===id);
     $('prod-modal-title').textContent='Editar producto';
@@ -1140,16 +1238,33 @@ function openProdModal(id){
     $('m-cat').value=p.cat;
     $('m-stock').value=p.stock;
     $('m-alerta').value=p.alert;
+    actions.innerHTML=`
+      <button class="btn-cancel" onclick="eliminarProducto(${id})" style="color:var(--red);border-color:rgba(176,48,48,.3)">Eliminar</button>
+      <button class="btn-save" onclick="guardarProducto()">Guardar</button>`;
   } else {
     $('prod-modal-title').textContent='Nuevo producto';
-    ['m-nombre','m-precio','m-stock','m-alerta'].forEach(id=>$(id).value='');
+    ['m-nombre','m-precio','m-stock','m-alerta'].forEach(fid=>$(fid).value='');
     $('m-cat').value=cats[0]?.id||'';
+    actions.innerHTML=`
+      <button class="btn-cancel" onclick="closeProdModal()">Cancelar</button>
+      <button class="btn-save" onclick="guardarProducto()">Guardar</button>`;
   }
   $('modal-prod').classList.add('open');
   setTimeout(()=>$('m-nombre').focus(),100);
 }
 function closeProdModal(){ $('modal-prod').classList.remove('open'); }
 function closeProdModalOutside(e){ if(e.target===$('modal-prod')) closeProdModal(); }
+
+function eliminarProducto(id){
+  const p=menu.find(x=>x.id===id); if(!p) return;
+  if(!confirm(`¿Eliminar "${p.name}"? Esta acción no se puede deshacer.`)) return;
+  menu=menu.filter(x=>x.id!==id);
+  save();
+  renderProdGrid(); renderInv(); renderMenuAdm(); renderStockAlerts();
+  syncMenuSheets();
+  closeProdModal();
+  showToast(`✓ "${p.name}" eliminado`);
+}
 
 function guardarProducto(){
   const name=$('m-nombre').value.trim();
@@ -1167,7 +1282,7 @@ function guardarProducto(){
   save();
   renderProdGrid(); renderCargaCats(); renderInvCats(); renderInv();
   renderMenuAdm(); renderStockAlerts();
-  syncMenuSheets(); // sync menu al guardar producto
+  syncMenuSheets();
   closeProdModal();
   showToast(editId?'✓ Producto actualizado':'✓ Producto agregado');
 }
