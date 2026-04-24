@@ -2740,10 +2740,14 @@ if(config.webappUrl){loadFromSheets();}
   }
 
   function ensureSupabaseAccordion(){
-    if(document.getElementById('acc-supabase')) return;
-    const gsHead=document.querySelector('[onclick*="gsheets"]');
+    const ajustesView=document.getElementById('v-ajustes');
+    if(!ajustesView) return;
+    if(document.getElementById('acc-supabase') && document.getElementById('acc-supabase')?.parentNode===ajustesView) return;
+    const existing=document.getElementById('acc-supabase');
+    if(existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    const gsHead=ajustesView.querySelector('[onclick*="gsheets"]');
     const gsAcc=gsHead ? gsHead.closest('.accordion') : null;
-    const targetParent=gsAcc?.parentNode || document.getElementById('v-ajustes') || document.body;
+    const targetParent=ajustesView;
     const panel=buildSupabaseAccordion();
     if(gsAcc && gsAcc.nextSibling) targetParent.insertBefore(panel, gsAcc.nextSibling);
     else targetParent.appendChild(panel);
@@ -2976,6 +2980,13 @@ if(config.webappUrl){loadFromSheets();}
       return res;
     };
   }
+
+  const supabaseAccordionObserver=new MutationObserver(()=>{
+    ensureSupabaseAccordion();
+    renderSupabaseStatus();
+  });
+  const ajustesNode=document.getElementById('v-ajustes');
+  if(ajustesNode) supabaseAccordionObserver.observe(ajustesNode,{childList:true});
 
   ensureSupabaseConfigShape();
   ensureSupabaseHeaderPill();
