@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -3472,7 +3472,11 @@ if(config.webappUrl){loadFromSheets();}
   let catalogSupabaseCounts={categories:0,products:0};
   let catalogWarnings=[];
 
-  function isUuidLike(v){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);}
+  window.isValidUuid = window.isValidUuid || function isValidUuid(value){
+    return typeof value === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  };
+  const isValidUuid = window.isValidUuid;
   function getCatalogConfig(){
     const cfg=(typeof config==='object'&&config)?config:JSON.parse(localStorage.getItem('config')||'{}');
     return{
@@ -3569,9 +3573,9 @@ if(config.webappUrl){loadFromSheets();}
       section: cat.seccion || 'cafeteria',
       reservable: !!cat.reservable,
       active: cat.active!==false,
-      legacy_id: cat.legacy_id || (!isUuidLike(String(cat.id||'')) ? String(cat.id) : null)
+      legacy_id: cat.legacy_id || (!isValidUuid(String(cat.id||'')) ? String(cat.id) : null)
     };
-    const sbId=existingRow?.id || cat._sb_id || (isUuidLike(String(cat.id||''))?String(cat.id):'');
+    const sbId=existingRow?.id || cat._sb_id || (isValidUuid(String(cat.id||''))?String(cat.id):'');
     if(sbId) payload.id=sbId;
     return payload;
   }
@@ -3610,16 +3614,16 @@ if(config.webappUrl){loadFromSheets();}
       unlimited: !!product.ilimitado,
       active: product.active!==false,
       variants: Array.isArray(product.variantes) ? product.variantes : [],
-      legacy_id: product.legacy_id || (!isUuidLike(String(product.id||'')) ? String(product.id) : null)
+      legacy_id: product.legacy_id || (!isValidUuid(String(product.id||'')) ? String(product.id) : null)
     };
-    const sbId=existingRow?.id || product._sb_id || (isUuidLike(String(product.id||''))?String(product.id):'');
+    const sbId=existingRow?.id || product._sb_id || (isValidUuid(String(product.id||''))?String(product.id):'');
     if(sbId) payload.id=sbId;
     return payload;
   }
   function resolveCategorySupabaseId(catRef,categoryRows){
     const rows=Array.isArray(categoryRows)?categoryRows:[];
     const ref=String(catRef||'');
-    const found=rows.find(r=>String(r.id||'')===ref || String(r._sb_id||'')===ref || String(r.legacy_id||'')===ref || String((r.id&&isUuidLike(String(r.id)))?r.id:'')===ref);
+    const found=rows.find(r=>String(r.id||'')===ref || String(r._sb_id||'')===ref || String(r.legacy_id||'')===ref || String((r.id&&isValidUuid(String(r.id)))?r.id:'')===ref);
     return found? (found._sb_id||found.id) : null;
   }
   function getFirstAvailableCategorySupabaseId(categoryRows){
@@ -3679,7 +3683,7 @@ if(config.webappUrl){loadFromSheets();}
       error: ''
     };
     if(!(cfg.supabaseUrl&&cfg.supabaseAnonKey)){return base;}
-    if(!cfg.activeStoreId || !isUuidLike(cfg.activeStoreId)){return {...base,error:'Store ID inválido o ausente'};}
+    if(!cfg.activeStoreId || !isValidUuid(cfg.activeStoreId)){return {...base,error:'Store ID inválido o ausente'};}
     const client=getCatalogSupabaseClient();
     if(!client) return {...base,error:'Cliente Supabase no disponible'};
     try{
@@ -3733,7 +3737,7 @@ if(config.webappUrl){loadFromSheets();}
   window.loadCatalogFromSupabase=async function({silent=false}={}){
     if(!hasCatalogSupabaseReady()) return false;
     const storeId=getCatalogStoreId();
-    if(!storeId || !isUuidLike(storeId)) return false;
+    if(!storeId || !isValidUuid(storeId)) return false;
     try{
       const diag=await fetchCatalogSupabaseDiagnostics({includeRows:true});
       catalogCurrentStoreName=diag.storeName||catalogCurrentStoreName;
@@ -3794,14 +3798,14 @@ if(config.webappUrl){loadFromSheets();}
     renderCatalogSupabaseUi();
   };
   async function findExistingCategoryRow(client,storeId,cat,categoryRows){
-    const refLegacy=cat.legacy_id || (!isUuidLike(String(cat.id||'')) ? String(cat.id) : '');
+    const refLegacy=cat.legacy_id || (!isValidUuid(String(cat.id||'')) ? String(cat.id) : '');
     const rows=Array.isArray(categoryRows)&&categoryRows.length?categoryRows:await queryStoreCategories(client,storeId,false);
     const found=rows.find(r=>String(r.id||'')===String(cat._sb_id||'') || String(r.id||'')===String(cat.id||'') || (refLegacy && String(r.legacy_id||'')===String(refLegacy)));
     if(found) return found;
     return null;
   }
   async function findExistingProductRow(client,storeId,product,productRows){
-    const refLegacy=product.legacy_id || (!isUuidLike(String(product.id||'')) ? String(product.id) : '');
+    const refLegacy=product.legacy_id || (!isValidUuid(String(product.id||'')) ? String(product.id) : '');
     const rows=Array.isArray(productRows)&&productRows.length?productRows:await queryStoreProducts(client,storeId,false);
     const found=rows.find(r=>String(r.id||'')===String(product._sb_id||'') || String(r.id||'')===String(product.id||'') || (refLegacy && String(r.legacy_id||'')===String(refLegacy)));
     if(found) return found;
@@ -3834,7 +3838,7 @@ if(config.webappUrl){loadFromSheets();}
       throw err;
     }
     cat._sb_id=res.data.id;
-    cat.legacy_id=res.data.legacy_id||cat.legacy_id||(!isUuidLike(String(cat.id||''))?String(cat.id):null);
+    cat.legacy_id=res.data.legacy_id||cat.legacy_id||(!isValidUuid(String(cat.id||''))?String(cat.id):null);
     save();
     return res.data;
   };
@@ -3876,7 +3880,7 @@ if(config.webappUrl){loadFromSheets();}
       throw err;
     }
     product._sb_id=res.data.id;
-    product.legacy_id=res.data.legacy_id||product.legacy_id||(!isUuidLike(String(product.id||''))?String(product.id):null);
+    product.legacy_id=res.data.legacy_id||product.legacy_id||(!isValidUuid(String(product.id||''))?String(product.id):null);
     save();
     return res.data;
   };
@@ -4190,6 +4194,11 @@ if(config.webappUrl){loadFromSheets();}
   let crCurrentStoreName='';
   let crSupabaseCounts={customers:0,reservations:0};
   let crWarnings=[];
+  const isValidUuid = window.isValidUuid || function isValidUuid(value){
+    return typeof value === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  };
+  window.isValidUuid = isValidUuid;
 
   function getCrStoreId(){
     try{
@@ -4273,7 +4282,7 @@ if(config.webappUrl){loadFromSheets();}
     const visitsCount=Array.isArray(customer?.visitas) ? customer.visitas.length : Number(customer?.total_visits||0);
     const payload={
       store_id: storeId,
-      legacy_id: customer.legacy_id || (!isUuidLike(String(customer.id||'')) ? String(customer.id) : null),
+      legacy_id: customer.legacy_id || (!isValidUuid(String(customer.id||'')) ? String(customer.id) : null),
       full_name: customer.nombre || 'Sin nombre',
       phone: customer.telefono || null,
       email: customer.email || null,
@@ -4282,7 +4291,7 @@ if(config.webappUrl){loadFromSheets();}
       notes: customer.nota || null,
       total_visits: Number(visitsCount)||0
     };
-    const sbId=existingRow?.id || customer._sb_id || (isUuidLike(String(customer.id||''))?String(customer.id):'');
+    const sbId=existingRow?.id || customer._sb_id || (isValidUuid(String(customer.id||''))?String(customer.id):'');
     if(sbId) payload.id=sbId;
     return payload;
   }
@@ -4343,7 +4352,7 @@ if(config.webappUrl){loadFromSheets();}
     const paymentMethod=normalizePaymentMethod(reservation.payment_mode==='mixed' ? (reservation.pagos?.[0]?.metodo||reservation.pago||'ef') : (reservation.pago||'ef'));
     const payload={
       store_id: storeId,
-      legacy_id: reservation.legacy_id || (!isUuidLike(String(reservation.id||'')) ? String(reservation.id) : null),
+      legacy_id: reservation.legacy_id || (!isValidUuid(String(reservation.id||'')) ? String(reservation.id) : null),
       customer_id: customerSbId || null,
       legacy_customer_id: reservation.clienteId ? String(reservation.clienteId) : null,
       customer_name: reservation.clienteNombre || reservation.nombre || null,
@@ -4370,7 +4379,7 @@ if(config.webappUrl){loadFromSheets();}
         pagos: Array.isArray(reservation.pagos)?reservation.pagos:[]
       }
     };
-    const sbId=existingRow?.id || reservation._sb_id || (isUuidLike(String(reservation.id||''))?String(reservation.id):'');
+    const sbId=existingRow?.id || reservation._sb_id || (isValidUuid(String(reservation.id||''))?String(reservation.id):'');
     if(sbId) payload.id=sbId;
     return payload;
   }
@@ -4392,8 +4401,10 @@ if(config.webappUrl){loadFromSheets();}
   async function fetchCrDiagnostics({includeRows=false}={}){
     const storeId=getCrStoreId();
     const base={storeId,storeName:'',role:'',customers:[],reservations:[],counts:{customers:0,reservations:0},error:'',warnings:[]};
-    if(!hasCrSupabaseReady()) return base;
-    if(!storeId || !isUuidLike(storeId)) return {...base,error:'Store ID inválido o ausente'};
+    const cfg=(typeof config==='object'&&config)?config:JSON.parse(localStorage.getItem('config')||'{}');
+    if(!(cfg.supabaseUrl&&cfg.supabaseAnonKey)) return base;
+    if(!storeId) return {...base,error:'No hay tienda activa'};
+    if(!isValidUuid(storeId)) return {...base,error:'Store ID inválido'};
     const client=window.getSupabaseClient?.();
     if(!client) return {...base,error:'Cliente Supabase no disponible'};
     try{
@@ -4499,12 +4510,12 @@ if(config.webappUrl){loadFromSheets();}
   };
   async function findExistingCustomerRow(client,storeId,customer,customerRows){
     const rows=Array.isArray(customerRows)&&customerRows.length?customerRows:await queryStoreCustomers(client,storeId);
-    const refLegacy=customer.legacy_id || (!isUuidLike(String(customer.id||'')) ? String(customer.id) : '');
+    const refLegacy=customer.legacy_id || (!isValidUuid(String(customer.id||'')) ? String(customer.id) : '');
     return rows.find(r=>String(r.id||'')===String(customer._sb_id||'') || String(r.id||'')===String(customer.id||'') || (refLegacy && String(r.legacy_id||'')===String(refLegacy))) || null;
   }
   async function findExistingReservationRow(client,storeId,reservation,reservationRows){
     const rows=Array.isArray(reservationRows)&&reservationRows.length?reservationRows:await queryStoreReservations(client,storeId);
-    const refLegacy=reservation.legacy_id || (!isUuidLike(String(reservation.id||'')) ? String(reservation.id) : '');
+    const refLegacy=reservation.legacy_id || (!isValidUuid(String(reservation.id||'')) ? String(reservation.id) : '');
     return rows.find(r=>String(r.id||'')===String(reservation._sb_id||'') || String(r.id||'')===String(reservation.id||'') || (refLegacy && String(r.legacy_id||'')===String(refLegacy))) || null;
   }
   function logCrWriteError(kind,meta,err){
@@ -4557,7 +4568,7 @@ if(config.webappUrl){loadFromSheets();}
         : await client.from('customers').insert(payload).select('id,store_id,legacy_id,full_name,phone,email,allergies,preferences,notes,total_visits,created_at').single();
       if(res.error) throw res.error;
       customer._sb_id=res.data.id;
-      customer.legacy_id=res.data.legacy_id||customer.legacy_id||(!isUuidLike(String(customer.id||''))?String(customer.id):null);
+      customer.legacy_id=res.data.legacy_id||customer.legacy_id||(!isValidUuid(String(customer.id||''))?String(customer.id):null);
       customer.total_visits=Number(res.data.total_visits)||customerVisitCount(customer);
       save();
       return res.data;
@@ -4619,7 +4630,7 @@ if(config.webappUrl){loadFromSheets();}
         : await client.from('reservations').insert(payload).select('id,store_id,legacy_id,customer_id,legacy_customer_id,customer_name,service_type,reservation_date,status,notes,legacy_raw,payment_mode,payment_method,created_at').single();
       if(res.error) throw res.error;
       reservation._sb_id=res.data.id;
-      reservation.legacy_id=res.data.legacy_id||reservation.legacy_id||(!isUuidLike(String(reservation.id||''))?String(reservation.id):null);
+      reservation.legacy_id=res.data.legacy_id||reservation.legacy_id||(!isValidUuid(String(reservation.id||''))?String(reservation.id):null);
       save();
       return res.data;
     }catch(err){
@@ -4692,28 +4703,35 @@ if(config.webappUrl){loadFromSheets();}
     renderCrSupabaseUi();
     showToast(`Lectura OK · ${diag.counts.customers} clientes y ${diag.counts.reservations} reservas`);
   };
-  window.reloadCustomersReservationsFromSupabase=async function(silent=false){
-    if(!hasCrSupabaseReady()) return false;
-    const diag=await fetchCrDiagnostics({includeRows:true});
-    crCurrentStoreName=diag.storeName||crCurrentStoreName;
-    crCurrentRole=diag.role||crCurrentRole;
-    crSupabaseCounts=diag.counts||crSupabaseCounts;
-    crLastReadAt=stampCrMoment();
-    if(diag.error){
-      setCrState('error',diag.error);
-      if(!silent) showToast(`Fallback local · ${diag.error}`);
+  window.loadCustomersReservationsFromSupabase=async function(silent=false){
+    try{
+      const diag=await fetchCrDiagnostics({includeRows:true});
+      crCurrentStoreName=diag.storeName||crCurrentStoreName;
+      crCurrentRole=diag.role||crCurrentRole;
+      crSupabaseCounts=diag.counts||crSupabaseCounts;
+      crLastReadAt=stampCrMoment();
+      if(diag.error){
+        setCrState('error',diag.error);
+        if(!silent) showToast(`Fallback local · ${diag.error}`);
+        return false;
+      }
+      const customersOk=await loadCustomersFromSupabase({silent:true,customerRowsOverride:diag.customers});
+      const customerMapRows=(diag.customers||[]).map(mapCustomerFromSupabase);
+      const reservationsOk=await loadReservationsFromSupabase({silent:true,reservationRowsOverride:diag.reservations,customerRowsForMap:customerMapRows});
+      if(customersOk||reservationsOk){
+        setCrState('supabase');
+        if(!silent) showToast('✓ Clientes y reservas cargados desde Supabase');
+        return true;
+      }
+      return false;
+    }catch(err){
+      console.error('[Customers/Reservations optional load failed]',err);
+      setCrState('error',err?.message||String(err));
+      if(!silent) showToast(`Fallback local · ${err?.message||err}`);
       return false;
     }
-    const customersOk=await loadCustomersFromSupabase({silent:true,customerRowsOverride:diag.customers});
-    const customerMapRows=diag.customers.map(mapCustomerFromSupabase);
-    const reservationsOk=await loadReservationsFromSupabase({silent:true,reservationRowsOverride:diag.reservations,customerRowsForMap:customerMapRows});
-    if(customersOk||reservationsOk){
-      setCrState('supabase');
-      if(!silent) showToast('✓ Clientes y reservas cargados desde Supabase');
-      return true;
-    }
-    return false;
   };
+  window.reloadCustomersReservationsFromSupabase=window.loadCustomersReservationsFromSupabase;
   window.debugCustomersReservationsSupabase=async function(){
     const diag=await fetchCrDiagnostics({includeRows:true});
     const customerMap=(diag.customers||[]).map(mapCustomerFromSupabase).map(c=>({localId:c.id,sbId:c._sb_id,legacyId:c.legacy_id,nombre:c.nombre}));
@@ -4740,7 +4758,7 @@ if(config.webappUrl){loadFromSheets();}
     if(!client) throw new Error('Cliente Supabase no disponible');
     const storeId=getCrStoreId();
     const storeMeta=getCrCurrentStoreMeta();
-    if(!storeId || !isUuidLike(storeId)) throw new Error('Store activa inválida para guardar cliente');
+    if(!storeId || !isValidUuid(storeId)) throw new Error('Store activa inválida para guardar cliente');
     const session=await getCrSession(client);
     if(!session) throw new Error('No hay sesión activa en Supabase');
     const existingRow=await findExistingCustomerRow(client,storeId,customer,opts.customerRows);
@@ -4770,7 +4788,7 @@ if(config.webappUrl){loadFromSheets();}
       });
       if(res.error) throw res.error;
       customer._sb_id=res.data.id;
-      customer.legacy_id=res.data.legacy_id||customer.legacy_id||(!isUuidLike(String(customer.id||''))?String(customer.id):null);
+      customer.legacy_id=res.data.legacy_id||customer.legacy_id||(!isValidUuid(String(customer.id||''))?String(customer.id):null);
       customer.total_visits=Number(res.data.total_visits)||customerVisitCount(customer);
       save();
       crLastSyncAt=stampCrMoment();
@@ -4799,7 +4817,7 @@ if(config.webappUrl){loadFromSheets();}
       const client=window.getSupabaseClient?.();
       if(!client) throw new Error('Cliente Supabase no disponible');
       const storeId=getCrStoreId();
-      if(!storeId || !isUuidLike(storeId)) throw new Error('Store activa inválida');
+      if(!storeId || !isValidUuid(storeId)) throw new Error('Store activa inválida');
       const session=await getCrSession(client);
       if(!session) throw new Error('No hay sesión activa');
       const selectRes=await client.from('customers').select('id,store_id,legacy_id,full_name,email,total_visits').eq('store_id',storeId).limit(5);
