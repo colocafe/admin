@@ -135,6 +135,12 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .pago-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
 .pago-opt{padding:8px;border:1px solid var(--border2);border-radius:var(--r-sm);background:var(--surf2);font-size:12px;font-weight:500;color:var(--ink2);cursor:pointer;text-align:center;transition:all .15s;user-select:none}
 .pago-opt.active{background:var(--orange);color:#fff;border-color:var(--orange)}
+.pago-mixed-box{display:none;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:12px}
+.pago-mixed-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.pago-mixed-row:last-child{margin-bottom:0}
+.pago-mixed-row span{flex:1;font-size:12px;color:var(--ink2)}
+.pago-mixed-row input{width:110px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r-sm);background:#fff;color:var(--ink);font-size:12px}
+.pago-mixed-status{font-size:11px;line-height:1.4;margin-top:8px;color:var(--ink3)}
 .btn-confirmar{width:100%;padding:12px;background:var(--orange);color:#fff;border:none;border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;font-weight:500;cursor:pointer;transition:all .15s}
 .btn-confirmar:active{transform:scale(.98);opacity:.9}
 .btn-confirmar:disabled{opacity:.35;cursor:default}
@@ -586,6 +592,16 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
           <div class="pago-grid">
             <div class="pago-opt active" id="popt-ef" onclick="setPago('ef')">Efectivo</div>
             <div class="pago-opt" id="popt-mp" onclick="setPago('mp')">Mercado Pago</div>
+            <div class="pago-opt" id="popt-tr" onclick="setPago('transferencia')">Transferencia</div>
+            <div class="pago-opt" id="popt-otro" onclick="setPago('otro')">Otro</div>
+            <div class="pago-opt" id="popt-mixed" onclick="setPago('mixed')">Pago mixto</div>
+          </div>
+          <div class="pago-mixed-box" id="mixed-payments-box">
+            <div class="pago-mixed-row"><span>Efectivo</span><input id="mpay-efectivo" type="number" min="0" step="0.01" placeholder="0" oninput="setMixedPaymentValue('efectivo',this.value)"></div>
+            <div class="pago-mixed-row"><span>Mercado Pago</span><input id="mpay-mercado_pago" type="number" min="0" step="0.01" placeholder="0" oninput="setMixedPaymentValue('mercado_pago',this.value)"></div>
+            <div class="pago-mixed-row"><span>Transferencia</span><input id="mpay-transferencia" type="number" min="0" step="0.01" placeholder="0" oninput="setMixedPaymentValue('transferencia',this.value)"></div>
+            <div class="pago-mixed-row"><span>Otro</span><input id="mpay-otro" type="number" min="0" step="0.01" placeholder="0" oninput="setMixedPaymentValue('otro',this.value)"></div>
+            <div class="pago-mixed-status" id="mixed-payments-status"></div>
           </div>
           <button class="btn-confirmar" id="btn-confirm" onclick="cerrarMesaOReserva()">Cerrar y cobrar</button>
         </div>
@@ -621,7 +637,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <div class="top-list" id="top-list"></div>
       </div>
       <div class="chart-card">
-        <div class="chart-ttl">Efectivo vs Mercado Pago</div>
+        <div class="chart-ttl">Cobros por medio</div>
         <div class="split-track" id="split-track"></div>
         <div class="split-stats" id="split-stats"></div>
       </div>
@@ -1183,7 +1199,14 @@ menu = menu.map(p=>({...p,name:p.name??p.nombre??'?',price:p.price??p.precio??0,
 cats = cats.map(c=>({...c,seccion:c.seccion||'cafeteria',reservable:c.reservable??false}));
 
 // State
-let carrito={},pago='ef',catCarga='todos',editId=null;
+const PAYMENT_METHODS=[
+  {key:'efectivo',legacy:'ef',label:'Efectivo',short:'Ef.',color:'var(--orange)'},
+  {key:'mercado_pago',legacy:'mp',label:'Mercado Pago',short:'MP',color:'var(--orange-mid)'},
+  {key:'transferencia',legacy:'transferencia',label:'Transferencia',short:'Transf.',color:'var(--blue)'},
+  {key:'otro',legacy:'otro',label:'Otro',short:'Otro',color:'var(--ink3)'}
+];
+function emptyMixedPayments(){return{efectivo:'',mercado_pago:'',transferencia:'',otro:''};}
+let carrito={},pago='ef',paymentMode='single',mixedPayments=emptyMixedPayments(),catCarga='todos',editId=null;
 let editClienteId=null,editReservaId=null,activeTab='carga';
 let mesaActivaId=null,tipoNuevaMesa='salon',dashFiltro='hoy';
 let prodParaVariantes=null,variantesSeleccionadas={};
@@ -1240,6 +1263,101 @@ function normalizeBusinessTime(hora,timestamp){
   if(timestamp){const d=parseLocalDateSafe(timestamp);if(!Number.isNaN(d.getTime()))return getLocalTimeString(d);}
   return '';
 }
+function money2(n){return Math.round((Number(n)||0)*100)/100;}
+function normalizePaymentMethod(method){
+  if(method==='ef'||method==='efectivo')return'efectivo';
+  if(method==='mp'||method==='mercado_pago'||method==='mercadopago')return'mercado_pago';
+  if(method==='transferencia'||method==='transfer')return'transferencia';
+  if(method==='otro')return'otro';
+  if(method==='mixed'||method==='mixto')return'mixed';
+  return method||'efectivo';
+}
+function normalizePaymentMode(mode,pagos){return mode==='mixed'||(Array.isArray(pagos)&&pagos.length>1)?'mixed':'single';}
+function getPaymentMethodMeta(method){return PAYMENT_METHODS.find(x=>x.key===normalizePaymentMethod(method))||PAYMENT_METHODS[3];}
+function getLegacyPagoValue(method){return getPaymentMethodMeta(method).legacy;}
+function normalizeStoredPayments(pagos){
+  if(!Array.isArray(pagos))return[];
+  return pagos.map(p=>({metodo:normalizePaymentMethod(p?.metodo),monto:money2(p?.monto)})).filter(p=>p.metodo!=='mixed'&&p.monto>0);
+}
+function getVentaTicketKey(v){return v.ticket_id||v.id;}
+function getVentasByTicket(rows){
+  const map={};
+  rows.forEach(v=>{const k=getVentaTicketKey(v);(map[k]||(map[k]=[])).push(v);});
+  return Object.values(map).map(group=>({rows:group,total:money2(group.reduce((s,v)=>s+(Number(v.total)||0),0)),ref:group.find(v=>Array.isArray(v.pagos)&&v.pagos.length)||group[0]}));
+}
+function getTicketPayments(group){
+  const pagos=normalizeStoredPayments(group.ref?.pagos);
+  if(pagos.length)return pagos;
+  return[{metodo:normalizePaymentMethod(group.ref?.pago||'ef'),monto:money2(group.total)}];
+}
+function getVentasPaymentTotals(rows){
+  const totals={efectivo:0,mercado_pago:0,transferencia:0,otro:0};
+  getVentasByTicket(rows).forEach(group=>getTicketPayments(group).forEach(p=>{if(totals[p.metodo]!==undefined)totals[p.metodo]=money2(totals[p.metodo]+p.monto);}));
+  return totals;
+}
+function getPaymentSummaryText(totals,{short=true,includeZero=false}={}){
+  const parts=PAYMENT_METHODS.filter(m=>includeZero||totals[m.key]>0).map(m=>`${short?m.short:m.label} ${fmt(totals[m.key]||0)}`);
+  return parts.join(' · ')||(short?'Sin pagos':'Sin pagos registrados');
+}
+function parsePaymentAmount(value){
+  const n=parseFloat(String(value??'').replace(',','.'));
+  return Number.isFinite(n)&&n>0?money2(n):0;
+}
+function getDraftMixedPayments(){return PAYMENT_METHODS.map(m=>({metodo:m.key,monto:parsePaymentAmount(mixedPayments[m.key])})).filter(p=>p.monto>0);}
+function getCurrentVentaTarget(){
+  if(!mesaActivaId)return null;
+  return mesaActivaId.startsWith('reserva_')?reservas.find(x=>x.id===mesaActivaId.replace('reserva_','')):mesas.find(x=>x.id===mesaActivaId);
+}
+function persistCurrentPaymentSelection(){
+  const target=getCurrentVentaTarget();
+  if(!target)return;
+  target.pago=pago;
+  target.payment_mode=paymentMode;
+  target.pagos=paymentMode==='mixed'?getDraftMixedPayments():[];
+  save();
+}
+function loadPaymentState(source){
+  pago=source?.pago||'ef';
+  paymentMode=normalizePaymentMode(source?.payment_mode,source?.pagos);
+  mixedPayments=emptyMixedPayments();
+  normalizeStoredPayments(source?.pagos).forEach(p=>{mixedPayments[p.metodo]=String(p.monto);});
+  updatePaymentUI();
+}
+function getCurrentPaymentState(total=money2(carritoTotalFn(carrito))){
+  if(paymentMode!=='mixed'){
+    const metodo=normalizePaymentMethod(pago||'ef');
+    return{payment_mode:'single',pago:getLegacyPagoValue(metodo),pagos:[{metodo,monto:money2(total)}],asignado:money2(total),diferencia:0,valido:total>0,mensaje:''};
+  }
+  const pagos=getDraftMixedPayments(),asignado=money2(pagos.reduce((s,p)=>s+p.monto,0)),diferencia=money2(total-asignado);
+  let mensaje='';
+  if(!pagos.length)mensaje='Ingresá al menos dos medios para usar pago mixto';
+  else if(pagos.length<2)mensaje=`Agregá otro medio. Llevás ${fmt(asignado)} de ${fmt(total)}`;
+  else if(diferencia>0)mensaje=`Faltan ${fmt(diferencia)} para completar ${fmt(total)}`;
+  else if(diferencia<0)mensaje=`Se excede por ${fmt(Math.abs(diferencia))}`;
+  else mensaje=`Pago mixto listo · ${pagos.map(p=>`${getPaymentMethodMeta(p.metodo).short} ${fmt(p.monto)}`).join(' · ')}`;
+  return{payment_mode:'mixed',pago:'mixed',pagos,asignado,diferencia,valido:total>0&&pagos.length>=2&&Math.abs(diferencia)<0.009,mensaje};
+}
+function updatePaymentUI(total=money2(carritoTotalFn(carrito)),state=getCurrentPaymentState(total)){
+  const ids={ef:'popt-ef',mp:'popt-mp',transferencia:'popt-tr',otro:'popt-otro',mixed:'popt-mixed'};
+  Object.entries(ids).forEach(([key,id])=>{const el=$(id);if(el)el.className='pago-opt'+((paymentMode==='mixed'&&key==='mixed')||(paymentMode==='single'&&pago===key)?' active':'');});
+  const box=$('mixed-payments-box');if(box)box.style.display=paymentMode==='mixed'?'block':'none';
+  PAYMENT_METHODS.forEach(m=>{const input=$(`mpay-${m.key}`);if(input&&input.value!==String(mixedPayments[m.key]??''))input.value=String(mixedPayments[m.key]??'');});
+  const status=$('mixed-payments-status');
+  if(status){
+    if(paymentMode!=='mixed'||total<=0){status.style.display='none';status.textContent='';}
+    else{
+      status.style.display='block';
+      status.textContent=state.mensaje;
+      status.style.color=state.valido?'var(--green)':state.diferencia<0?'var(--red)':'var(--amber)';
+    }
+  }
+}
+function setMixedPaymentValue(method,value){mixedPayments[method]=value;paymentMode='mixed';persistCurrentPaymentSelection();renderCart();}
+function normalizeVentaRecord(v){return{...v,fecha:normalizeBusinessDate(v?.fecha,v?.timestamp),hora:normalizeBusinessTime(v?.hora,v?.timestamp),payment_mode:normalizePaymentMode(v?.payment_mode,v?.pagos),pagos:normalizeStoredPayments(v?.pagos)};}
+function normalizeCobroTargetRecord(r){return{...r,pago:r?.pago||'ef',payment_mode:normalizePaymentMode(r?.payment_mode,r?.pagos),pagos:normalizeStoredPayments(r?.pagos)};}
+ventas=ventas.map(normalizeVentaRecord);
+mesas=mesas.map(normalizeCobroTargetRecord);
+reservas=reservas.map(normalizeCobroTargetRecord);
 function fmtFull(value){const d=value instanceof Date?value:parseLocalDateSafe(value);const D=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return `${D[d.getDay()]} ${d.getDate()} de ${M[d.getMonth()]} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;}
 function fmtShort(value){const d=value instanceof Date?value:parseLocalDateSafe(value);const D=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${D[d.getDay()]} ${d.getDate()} ${M[d.getMonth()]}`;}
 function today(){return getLocalDateString();}
@@ -1365,9 +1483,9 @@ function abrirTurno(){
 function mostrarResumenTurno(){
   $('turno-modal-titulo').textContent='Turno activo';
   const vt=turno.ventasIds?ventas.filter(v=>turno.ventasIds.includes(v.id)):[];
-  const ef=vt.filter(v=>v.pago==='ef').reduce((s,v)=>s+v.total,0);
-  const mp=vt.filter(v=>v.pago==='mp').reduce((s,v)=>s+v.total,0);
-  const tot=ef+mp;
+  const totalesPagos=getVentasPaymentTotals(vt);
+  const ef=totalesPagos.efectivo,mp=totalesPagos.mercado_pago,tr=totalesPagos.transferencia,otro=totalesPagos.otro;
+  const tot=money2(ef+mp+tr+otro);
   const cafe=vt.filter(v=>getCat(v.cat).seccion==='cafeteria').reduce((s,v)=>s+v.total,0);
   const cocina=vt.filter(v=>getCat(v.cat).seccion==='cocina').reduce((s,v)=>s+v.total,0);
   // Por operador
@@ -1379,24 +1497,26 @@ function mostrarResumenTurno(){
       <div class="turno-stat"><div class="turno-stat-lbl">Total vendido</div><div class="turno-stat-val" style="color:var(--orange)">${fmt(tot)}</div></div>
       <div class="turno-stat"><div class="turno-stat-lbl">Efectivo</div><div class="turno-stat-val">${fmt(ef)}</div></div>
       <div class="turno-stat"><div class="turno-stat-lbl">Mercado Pago</div><div class="turno-stat-val">${fmt(mp)}</div></div>
+      <div class="turno-stat"><div class="turno-stat-lbl">Transferencia</div><div class="turno-stat-val">${fmt(tr)}</div></div>
+      <div class="turno-stat"><div class="turno-stat-lbl">Otro</div><div class="turno-stat-val">${fmt(otro)}</div></div>
       <div class="turno-stat"><div class="turno-stat-lbl">☕ Cafetería</div><div class="turno-stat-val">${fmt(cafe)}</div></div>
       <div class="turno-stat"><div class="turno-stat-lbl">🍳 Cocina</div><div class="turno-stat-val">${fmt(cocina)}</div></div>
     </div>
     ${Object.keys(porOp).length>1?`<div style="margin-bottom:14px;font-size:12px">${Object.entries(porOp).map(([op,t])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>${op}</span><span style="font-weight:500">${fmt(t)}</span></div>`).join('')}</div>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" onclick="cerrarModalTurno()">Seguir</button>
-      <button class="btn-save" style="background:var(--green)" onclick="pedirCerrarTurno(${ef},${mp},${tot},${cafe},${cocina})">Cerrar turno</button>
+      <button class="btn-save" style="background:var(--green)" onclick="pedirCerrarTurno(${ef},${mp},${tr},${otro},${tot},${cafe},${cocina})">Cerrar turno</button>
     </div>`;
 }
-function pedirCerrarTurno(ef,mp,tot,cafe,cocina){
+function pedirCerrarTurno(ef,mp,tr,otro,tot,cafe,cocina){
   cerrarModalTurno();
-  pedirConfirm(`Cerrar turno de ${turno.operador} — total ${fmt(tot)}`,()=>cerrarTurno(ef,mp,tot,cafe,cocina),'Cerrar turno','var(--green)','🏁');
+  pedirConfirm(`Cerrar turno de ${turno.operador} — total ${fmt(tot)}`,()=>cerrarTurno(ef,mp,tr,otro,tot,cafe,cocina),'Cerrar turno','var(--green)','🏁');
 }
-async function cerrarTurno(ef,mp,tot,cafe,cocina){
+async function cerrarTurno(ef,mp,tr,otro,tot,cafe,cocina){
   if(!(turno&&turno.abierto)){showToast('No hay turno abierto');return;}
   const turnoCerrado={...turno,ventasIds:[...(turno.ventasIds||[])]};
   const cierre=new Date();
-  const r={fecha:getLocalDateString(cierre),operador:turnoCerrado.operador,apertura:turnoCerrado.apertura,cierre:getLocalTimestamp(cierre),fondoCaja:turnoCerrado.fondoCaja,totalEf:ef,totalMp:mp,total:tot,totalCafeteria:cafe,totalCocina:cocina};
+  const r={fecha:getLocalDateString(cierre),operador:turnoCerrado.operador,apertura:turnoCerrado.apertura,cierre:getLocalTimestamp(cierre),fondoCaja:turnoCerrado.fondoCaja,totalEf:ef,totalMp:mp,totalTransferencia:tr,totalOtro:otro,total:tot,totalCafeteria:cafe,totalCocina:cocina};
   turno=null;save();renderTurnoPill();showToast('✓ Turno cerrado');
   await sheetsPost({action:'addTurno',row:r});
 }
@@ -1424,7 +1544,7 @@ async function loadFromSheets(){
   const data=await sheetsGet();
   if(!data||!data.ok){showToast('⚠️ No se pudo leer el Sheet');return;}
   let changed=false;
-  if(data.ventas&&data.ventas.length>0){ventas=data.ventas.map(v=>({...v,fecha:normalizeBusinessDate(v.fecha,v.timestamp),hora:normalizeBusinessTime(v.hora,v.timestamp)}));changed=true;}
+  if(data.ventas&&data.ventas.length>0){ventas=data.ventas.map(v=>({...v,fecha:normalizeBusinessDate(v.fecha,v.timestamp),hora:normalizeBusinessTime(v.hora,v.timestamp),payment_mode:normalizePaymentMode(v.payment_mode,v.pagos),pagos:normalizeStoredPayments(v.pagos)}));changed=true;}
   if(data.menu&&data.menu.length>0){
     menu=data.menu.map(p=>({...p,cat:(cats.find(c=>c.name===p.catNombre)||cats[0]||{}).id||cats[0]?.id,variantes:p.variantes||[]}));
     changed=true;
@@ -1615,7 +1735,7 @@ function cerrarModalNuevaMesa(){$('modal-nueva-mesa').classList.remove('open');}
 function closeModalNuevaMesa(e){if(e.target===$('modal-nueva-mesa'))cerrarModalNuevaMesa();}
 function confirmarNuevaMesa(){
   const nombre=$('nueva-mesa-input').value.trim();if(!nombre){showToast('Ingresá un nombre');return;}
-  const m={id:'m_'+Date.now(),nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',apertura:nowISO()};
+  const m={id:'m_'+Date.now(),nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO()};
   mesas.push(m);save();syncMesasSheets();cerrarModalNuevaMesa();abrirMesa(m.id);
 }
 document.addEventListener('DOMContentLoaded',()=>{
@@ -1629,27 +1749,27 @@ function abrirMesa(id){
   const m=mesas.find(x=>x.id===id);if(!m)return;
   mesaActivaId=id;carrito={};
   Object.entries(m.items||{}).forEach(([k,v])=>{carrito[k]={...v};});
-  pago=m.pago||'ef';
   $('mesa-titulo').textContent=m.nombre;
   const badge=$('mesa-tipo-badge');badge.textContent=tipoLabel(m.tipo||'salon');badge.className=`mesa-tipo-badge ${tipoBadgeClass(m.tipo||'salon')}`;
   $('btn-confirm').textContent='Cerrar y cobrar';
   $('view-mesas').style.display='none';$('view-pedido').style.display='block';
-  renderCargaCats();renderProdGrid();renderCart();setPago(pago);
+  loadPaymentState(m);renderCargaCats();renderProdGrid();renderCart();
 }
 function abrirReservaComoVenta(id){
   const r=reservas.find(x=>x.id===id);if(!r)return;
   mesaActivaId='reserva_'+id;carrito={};
   (r.items||[]).forEach((item,i)=>{carrito[`res_${i}`]={...item};});
-  pago=r.pago||'ef';
   $('mesa-titulo').textContent=r.nombre;
   const badge=$('mesa-tipo-badge');badge.textContent=tipoLabel(r.tipo||'salon');badge.className=`mesa-tipo-badge ${tipoBadgeClass(r.tipo||'salon')}`;
   $('btn-confirm').textContent='Cobrar reserva';
   $('view-mesas').style.display='none';$('view-pedido').style.display='block';
-  renderCargaCats();renderProdGrid();renderCart();setPago(pago);
+  loadPaymentState(r);renderCargaCats();renderProdGrid();renderCart();
 }
 function volverAMesas(){
   if(mesaActivaId&&!mesaActivaId.startsWith('reserva_')){
-    const m=mesas.find(x=>x.id===mesaActivaId);if(m){m.items={...carrito};m.pago=pago;save();syncMesasSheets();}
+    const m=mesas.find(x=>x.id===mesaActivaId);if(m){m.items={...carrito};m.pago=pago;m.payment_mode=paymentMode;m.pagos=paymentMode==='mixed'?getDraftMixedPayments():[];save();syncMesasSheets();}
+  }else if(mesaActivaId&&mesaActivaId.startsWith('reserva_')){
+    const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){r.pago=pago;r.payment_mode=paymentMode;r.pagos=paymentMode==='mixed'?getDraftMixedPayments():[];save();syncReservasSheets();}
   }
   renderVentas();
 }
@@ -1662,6 +1782,8 @@ function saveMesaCarrito(){
 function cerrarMesaOReserva(){
   const items=Object.values(carrito);
   if(!items.length){showToast('El pedido está vacío');return;}
+  const paymentState=getCurrentPaymentState();
+  if(!paymentState.valido){showToast(paymentState.mensaje||'Revisá los pagos');return;}
   // Ask which operator served this table
   const sel=$('cobro-operador-sel');if(!sel)return;
   sel.innerHTML=getOperadoresOpts(true);
@@ -1689,11 +1811,15 @@ async function ejecutarCobro(operadorCobro){
   const esReserva=mesaActivaId&&mesaActivaId.startsWith('reserva_');
   const items=Object.values(carrito);
   const btn=$('btn-confirm');btn.disabled=true;btn.textContent='Cerrando…';
+  const totalVenta=money2(carritoTotalFn(carrito));
+  const paymentState=getCurrentPaymentState(totalVenta);
+  if(!paymentState.valido){showToast(paymentState.mensaje||'Revisá los pagos');btn.disabled=false;btn.textContent=esReserva?'Cobrar reserva':'Cerrar y cobrar';return;}
   const momentoVenta=new Date();
   const fecha=getLocalDateString(momentoVenta),hora=getLocalTimeString(momentoVenta),ts=getLocalTimestamp(momentoVenta);
   const turnoActivo=turno&&turno.abierto?turno:null;
   const operador=operadorCobro||(turnoActivo?turnoActivo.operador:'Sin turno');
   const ventaIds=[];
+  const ticketId='t_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   let tipoVenta='salon',nombreMesa='';
   if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){tipoVenta=r.tipo||'salon';nombreMesa=r.nombre;}}
   else{const m=mesas.find(x=>x.id===mesaActivaId);if(m){tipoVenta=m.tipo||'salon';nombreMesa=m.nombre;}}
@@ -1704,16 +1830,17 @@ async function ejecutarCobro(operadorCobro){
     ventaIds.push(ventaId);
     if(p&&!p.ilimitado)p.stock=Math.max(0,(p.stock||0)-item.qty);
     return{id:ventaId,fecha,hora,timestamp:ts,operador,mesa:nombreMesa,tipo:tipoVenta,
+      ticket_id:ticketId,payment_mode:paymentState.payment_mode,pagos:paymentState.pagos,
       producto:p?p.name:'?',variantes:(item.vars||[]).map(v=>v.nombre).join(', '),
       nota:item.nota||'',categoria:getCat(p?.cat).name,seccion:getCat(p?.cat).seccion,
       cantidad:item.qty,precioBase:item.precio,precioVars:varsExtra,
-      total:(item.precio+varsExtra)*item.qty,pago,cat:p?.cat};
+      total:(item.precio+varsExtra)*item.qty,pago:paymentState.pago,cat:p?.cat};
   });
   ventas.push(...nuevas);
   if(turnoActivo)turnoActivo.ventasIds=[...(turnoActivo.ventasIds||[]),...ventaIds];
-  if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){r.estado='pagada';r.pago=pago;}}
+  if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){r.estado='pagada';r.pago=paymentState.pago;r.payment_mode=paymentState.payment_mode;r.pagos=paymentState.pagos;}}
   else{mesas=mesas.filter(x=>x.id!==mesaActivaId);}
-  save();syncMesasSheets();if(turnoActivo&&turno===turnoActivo)syncTurnoSheets();
+  save();if(esReserva)syncReservasSheets();else syncMesasSheets();if(turnoActivo&&turno===turnoActivo)syncTurnoSheets();
   const ok=await syncVentasSheets(nuevas);
   showToast(ok?'✓ Venta guardada en Sheets':(config.webappUrl?'✓ Registrada (sin internet)':'✓ Venta registrada'));
   btn.disabled=false;btn.textContent='Cerrar y cobrar';
@@ -1767,8 +1894,8 @@ function renderCart(){
   const items=Object.entries(carrito);
   const ct=$('cart-total'),ce=$('cart-empty'),cr=$('cart-rows'),bc=$('btn-confirm');
   if(!ct)return;
-  if(!items.length){ce.style.display='block';cr.style.display='none';ct.textContent='$0';if(bc)bc.disabled=true;return;}
-  if(bc)bc.disabled=false;ce.style.display='none';cr.style.display='flex';
+  if(!items.length){ce.style.display='block';cr.style.display='none';ct.textContent='$0';updatePaymentUI(0,{valido:false,mensaje:''});if(bc)bc.disabled=true;return;}
+  ce.style.display='none';cr.style.display='flex';
   cr.innerHTML=items.map(([key,item])=>{
     const p=menu.find(x=>x.id==item.prodId);if(!p)return'';
     const varsExtra=(item.vars||[]).reduce((s,v)=>s+v.precio,0);
@@ -1787,13 +1914,17 @@ function renderCart(){
       <span class="c-sub">${fmt(sub)}</span>
     </div>`;
   }).join('');
-  ct.textContent=fmt(carritoTotalFn(carrito));
+  const total=money2(carritoTotalFn(carrito));
+  const paymentState=getCurrentPaymentState(total);
+  ct.textContent=fmt(total);
+  updatePaymentUI(total,paymentState);
+  if(bc)bc.disabled=!paymentState.valido;
 }
 function setPago(t){
-  pago=t;
-  if(mesaActivaId&&!mesaActivaId.startsWith('reserva_')){const m=mesas.find(x=>x.id===mesaActivaId);if(m){m.pago=t;save();}}
-  $('popt-ef').className='pago-opt'+(t==='ef'?' active':'');
-  $('popt-mp').className='pago-opt'+(t==='mp'?' active':'');
+  if(t==='mixed')paymentMode='mixed';
+  else{paymentMode='single';pago=t;}
+  persistCurrentPaymentSelection();
+  renderCart();
 }
 function abrirModalVariantes(p){
   prodParaVariantes=p;variantesSeleccionadas={};
@@ -2009,14 +2140,11 @@ function renderDashboard(){
     <div class="top-bar-bg"><div class="top-bar-fill" style="width:${Math.round(t.c/maxC*100)}%"></div></div>
     <span class="top-cnt">${t.c} ud.</span></div>`).join(''):'<div style="font-size:12px;color:var(--ink3);padding:12px;text-align:center">Sin datos</div>';
 
-  // Ef vs MP
-  const ef=vh.filter(v=>v.pago==='ef').reduce((s,v)=>s+v.total,0);
-  const mp=vh.filter(v=>v.pago==='mp').reduce((s,v)=>s+v.total,0);
-  const tot2=ef+mp||1,pE=Math.round(ef/tot2*100);
-  $('split-track').innerHTML=`<div class="split-ef" style="width:${pE}%"></div><div class="split-mp" style="width:${100-pE}%"></div>`;
-  $('split-stats').innerHTML=`
-    <div class="split-stat"><div class="split-lbl"><span class="sdot" style="background:var(--orange)"></span>Efectivo</div><div class="split-pct">${pE}%</div><div class="split-monto">${fmt(ef)}</div></div>
-    <div class="split-stat"><div class="split-lbl"><span class="sdot" style="background:var(--orange-mid)"></span>Mercado Pago</div><div class="split-pct">${100-pE}%</div><div class="split-monto">${fmt(mp)}</div></div>`;
+  // Cobros por medio
+  const paymentTotals=getVentasPaymentTotals(vh);
+  const totalCobrado=money2(Object.values(paymentTotals).reduce((s,v)=>s+v,0))||1;
+  $('split-track').innerHTML=PAYMENT_METHODS.filter(m=>paymentTotals[m.key]>0).map(m=>`<div style="width:${Math.round(paymentTotals[m.key]/totalCobrado*100)}%;background:${m.color}"></div>`).join('');
+  $('split-stats').innerHTML=PAYMENT_METHODS.map(m=>`<div class="split-stat"><div class="split-lbl"><span class="sdot" style="background:${m.color}"></span>${m.label}</div><div class="split-pct">${Math.round((paymentTotals[m.key]||0)/totalCobrado*100)}%</div><div class="split-monto">${fmt(paymentTotals[m.key]||0)}</div></div>`).join('');
 
   // Ventas por categoría eliminada del dashboard
 
@@ -2051,13 +2179,13 @@ function renderHistVentas(){
   if(!entries.length){$('hist-list').innerHTML='<div class="empty">No hay ventas registradas</div>';return;}
   $('hist-list').innerHTML=entries.map(([fecha,rows],i)=>{
     const total=rows.reduce((s,v)=>s+v.total,0);
-    const ef=rows.filter(v=>v.pago==='ef').length,mp=rows.filter(v=>v.pago==='mp').length;
+    const pagosTxt=getPaymentSummaryText(getVentasPaymentTotals(rows));
     const d=parseLocalDateSafe(fecha);
     // Group by mesa/transaction for detail view — show individual sales with hora+operador
     const ventasSorted=[...rows].sort((a,b)=>(a.hora||'').localeCompare(b.hora||''));
     return `<div class="hist-item">
       <div class="hist-hdr" onclick="toggleHist(${i})">
-        <div><div class="hist-fecha">${fmtShort(d)}</div><div class="hist-meta">Ef. ${ef} · MP ${mp} · ${rows.length} ítems</div></div>
+        <div><div class="hist-fecha">${fmtShort(d)}</div><div class="hist-meta">${pagosTxt} · ${rows.length} ítems</div></div>
         <div class="hist-right"><span class="hist-total">${fmt(total)}</span><span class="hist-arr" id="ha-${i}">▾</span></div>
       </div>
       <div class="hist-detail" id="hd-${i}">
