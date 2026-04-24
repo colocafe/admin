@@ -2655,11 +2655,27 @@ if(config.webappUrl){loadFromSheets();}
 </script>
 <script>
 (()=>{
-  let supabaseClient=null,supabaseSession=null,supabaseUser=null,supabaseProfile=null,supabaseStores=[],supabaseAuthSub=null;
+  let supabaseClient=null,supabaseSession=null,supabaseUser=null,supabaseProfile=null,supabaseStores=[],supabaseAuthSub=null,supabaseAuthSig='';
 
   function saveConfig(){ localStorage.setItem('config', JSON.stringify(config||{})); }
   function getSupabaseLib(){ return window.supabase||null; }
   function hasSupabaseConfig(){ return !!(config&&config.supabaseUrl&&config.supabaseAnonKey); }
+  function getSupabaseClient(forceRefresh=false){
+    ensureSupabaseConfigShape();
+    if(!hasSupabaseConfig()) return null;
+    const lib=getSupabaseLib();
+    if(!lib?.createClient) return null;
+    const sig=`${config.supabaseUrl}::${config.supabaseAnonKey}`;
+    const existing=window.__coloSupabaseClient;
+    if(!forceRefresh && existing && existing.__coloSig===sig) return existing;
+    const client=lib.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+    });
+    client.__coloSig=sig;
+    window.__coloSupabaseClient=client;
+    return client;
+  }
+  window.getSupabaseClient=getSupabaseClient;
   function setSupabaseStatus(msg){ const el=document.getElementById('sb-auth-status'); if(el) el.textContent=msg; }
   function ensureSupabaseConfigShape(){ if(!window.config) window.config={}; config={ activeStoreId:'', ...config }; }
 
@@ -2974,25 +2990,28 @@ if(config.webappUrl){loadFromSheets();}
 
   async function initSupabaseClient(showToastOnReady=false){
     ensureSupabaseConfigShape();
-    if(supabaseAuthSub){ supabaseAuthSub.unsubscribe(); supabaseAuthSub=null; }
     if(!hasSupabaseConfig()){ supabaseClient=null; clearSupabaseContext(); return false; }
-    const lib=getSupabaseLib();
-    if(!lib?.createClient){
+    const client=getSupabaseClient();
+    if(!client){
       renderSupabaseStatus();
       setSupabaseStatus('No cargó la librería de Supabase.');
       return false;
     }
     try{
-      supabaseClient=lib.createClient(config.supabaseUrl, config.supabaseAnonKey, {
-        auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
-      });
-      const { data:{ subscription } } = supabaseClient.auth.onAuthStateChange((event,session)=>{
-        supabaseSession=session||null;
-        supabaseUser=session?.user||null;
-        renderSupabaseStatus();
-        setTimeout(()=>{ supabaseUser ? loadSupabaseContext() : clearSupabaseContext(); }, 0);
-      });
-      supabaseAuthSub=subscription;
+      const nextSig=client.__coloSig||'';
+      const clientChanged=supabaseClient!==client;
+      supabaseClient=client;
+      if(clientChanged || !supabaseAuthSub || supabaseAuthSig!==nextSig){
+        if(supabaseAuthSub){ supabaseAuthSub.unsubscribe(); supabaseAuthSub=null; }
+        const { data:{ subscription } } = supabaseClient.auth.onAuthStateChange((event,session)=>{
+          supabaseSession=session||null;
+          supabaseUser=session?.user||null;
+          renderSupabaseStatus();
+          setTimeout(()=>{ supabaseUser ? loadSupabaseContext() : clearSupabaseContext(); }, 0);
+        });
+        supabaseAuthSub=subscription;
+        supabaseAuthSig=nextSig;
+      }
       const { data, error } = await supabaseClient.auth.getSession();
       if(error) throw error;
       supabaseSession=data.session||null;
@@ -3470,13 +3489,12 @@ if(config.webappUrl){loadFromSheets();}
   function getCatalogSupabaseClient(){
     const cfg=getCatalogConfig();
     if(!(cfg.supabaseUrl&&cfg.supabaseAnonKey&&window.supabase?.createClient)) return null;
-    if(!catalogSbClient || catalogSbClient.__url!==cfg.supabaseUrl || catalogSbClient.__key!==cfg.supabaseAnonKey){
-      catalogSbClient=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{
-        auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
-      });
-      catalogSbClient.__url=cfg.supabaseUrl;
-      catalogSbClient.__key=cfg.supabaseAnonKey;
+    const sharedClient=window.getSupabaseClient?.();
+    if(sharedClient){
+      catalogSbClient=sharedClient;
+      return catalogSbClient;
     }
+    catalogSbClient=window.__coloSupabaseClient||null;
     return catalogSbClient;
   }
   function setCatalogLoadState(state,error=''){
