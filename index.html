@@ -3136,6 +3136,30 @@ if(config.webappUrl){loadFromSheets();}
     saveConfig();
     renderSupabaseStatus();
   };
+  window.getActiveStore=function(){
+    const activeStoreId=(config&&config.activeStoreId)||'';
+    const stores=Array.isArray(window.supabaseStores)?window.supabaseStores:[];
+    if(activeStoreId){
+      const found=stores.find(s=>String(s?.id||'')===String(activeStoreId));
+      if(found) return found;
+      return {id:activeStoreId,name:'',role:''};
+    }
+    return stores.find(s=>s?.active)||stores[0]||null;
+  };
+  window.getActiveStoreId=function(){
+    const store=window.getActiveStore?.();
+    return String(store?.id||((config&&config.activeStoreId)||''));
+  };
+  window.getActiveStoreName=function(){
+    const store=window.getActiveStore?.();
+    if(store?.name) return store.name;
+    if(store?.id) return String(store.id);
+    return '—';
+  };
+  window.getActiveStoreRole=function(){
+    const store=window.getActiveStore?.();
+    return store?.role||'';
+  };
 
   const _guardarConfigAdj=window.guardarConfigAdj;
   if(typeof _guardarConfigAdj==='function'){
@@ -3497,7 +3521,7 @@ if(config.webappUrl){loadFromSheets();}
       activeStoreId:cfg.activeStoreId||''
     };
   }
-  function getCatalogStoreId(){return getCatalogConfig().activeStoreId||'';}
+  function getCatalogStoreId(){return window.getActiveStoreId?.()||getCatalogConfig().activeStoreId||'';}
   function hasCatalogSupabaseReady(){
     const cfg=getCatalogConfig();
     return !!(cfg.supabaseUrl&&cfg.supabaseAnonKey&&cfg.activeStoreId&&window.supabase?.createClient);
@@ -3553,9 +3577,9 @@ if(config.webappUrl){loadFromSheets();}
     if(diag){
       diag.innerHTML=`
         <div><strong>Fuente catálogo actual:</strong> ${catalogLoadState==='error'?'Fallback':catalogLoadState==='supabase'?'Supabase':'Local'}</div>
-        <div><strong>Store activa:</strong> ${catalogCurrentStoreName||'Sin store activa'}</div>
-        <div><strong>Store ID:</strong> ${getCatalogStoreId()||'—'}</div>
-        <div><strong>Rol:</strong> ${catalogCurrentRole||'—'}</div>
+        <div><strong>Store activa:</strong> ${window.getActiveStoreName?.()||catalogCurrentStoreName||'—'}</div>
+        <div><strong>Store ID:</strong> ${window.getActiveStoreId?.()||getCatalogStoreId()||'—'}</div>
+        <div><strong>Rol:</strong> ${window.getActiveStoreRole?.()||catalogCurrentRole||'—'}</div>
         <div><strong>Cantidad local:</strong> ${cats.length} categorías · ${menu.length} productos</div>
         <div><strong>Cantidad Supabase:</strong> ${catalogSupabaseCounts.categories} categorías · ${catalogSupabaseCounts.products} productos</div>
         <div><strong>Último error Supabase:</strong> ${catalogLoadError||'—'}</div>
@@ -3686,8 +3710,8 @@ if(config.webappUrl){loadFromSheets();}
       source: catalogLoadState,
       localCounts:{categories:cats.length,products:menu.length},
       storeId: cfg.activeStoreId||'',
-      storeName: '',
-      role: '',
+        storeName: window.getActiveStoreName?.()||'',
+        role: window.getActiveStoreRole?.()||'',
       categoryRows: [],
       productRows: [],
       supabaseCounts:{categories:0,products:0},
@@ -6425,31 +6449,15 @@ if(config.webappUrl){loadFromSheets();}
       activeStoreId:cfg.activeStoreId||''
     };
   }
-  function getSalesStore(){
-    const cfg=getSalesConfig();
-    const activeStoreId=cfg.activeStoreId||'';
-    const stores=Array.isArray(window.supabaseStores)?window.supabaseStores:[];
-    if(activeStoreId){
-      const found=stores.find(s=>String(s?.id||'')===String(activeStoreId));
-      if(found) return found;
-      return{id:activeStoreId,name:'',role:''};
-    }
-    return stores.find(s=>s?.active)||null;
-  }
+  function getSalesStore(){return window.getActiveStore?.()||null;}
   function getSalesStoreId(){
-    const store=getSalesStore();
-    return String(store?.id||getSalesConfig().activeStoreId||'');
+    return String(window.getActiveStoreId?.()||getSalesConfig().activeStoreId||'');
   }
   function getSalesStoreName(){
-    const store=getSalesStore();
-    if(store?.name) return store.name;
-    if(store?.id) return String(store.id);
-    if(salesCurrentStoreName) return salesCurrentStoreName;
-    return '—';
+    return window.getActiveStoreName?.()||salesCurrentStoreName||'—';
   }
   function getSalesRole(){
-    const store=getSalesStore();
-    return store?.role||salesCurrentRole||'';
+    return window.getActiveStoreRole?.()||salesCurrentRole||'';
   }
   function hasSalesSupabaseReady(){
     const cfg=getSalesConfig();
@@ -6616,6 +6624,12 @@ if(config.webappUrl){loadFromSheets();}
   function inferSalesPolicyMessage(err){
     const msg=(err?.message||'').toLowerCase();
     if(msg.includes('row-level security')||msg.includes('permission denied')) return 'Revisá policies sales/sale_items/sale_payments para owner/admin/operator.';
+    return '';
+  }
+  function inferSalesSchemaCacheMessage(err){
+    if(err?.code==='PGRST204' && String(err?.message||'').toLowerCase().includes('legacy_id')){
+      return "PostgREST todavía no refrescó schema cache. Ejecutar notify pgrst, 'reload schema' o esperar unos segundos.";
+    }
     return '';
   }
   async function resolveSaleProductId(row,client,storeId,cache){
@@ -6900,6 +6914,10 @@ if(config.webappUrl){loadFromSheets();}
       };
       const {count:salesCount,error:salesSelectErr}=await client.from('sales').select('id',{count:'exact',head:true}).eq('store_id',storeId);
       if(salesSelectErr) throw salesSelectErr;
+      const {count:itemsCount,error:itemsSelectErr}=await client.from('sale_items').select('id',{count:'exact',head:true}).eq('store_id',storeId);
+      if(itemsSelectErr) throw itemsSelectErr;
+      const {count:paymentsCount,error:paymentsSelectErr}=await client.from('sale_payments').select('id',{count:'exact',head:true}).eq('store_id',storeId);
+      if(paymentsSelectErr) throw paymentsSelectErr;
       const saleInsert=await client.from('sales').insert(salePayload).select('id,legacy_id').single();
       if(saleInsert.error) throw saleInsert.error;
       const saleId=saleInsert.data.id;
@@ -6927,6 +6945,8 @@ if(config.webappUrl){loadFromSheets();}
         metadata:{debug:true}
       }).select('id').single();
       if(paymentInsert.error) throw paymentInsert.error;
+      const paymentUpdate=await client.from('sale_payments').update({amount:2}).eq('id',paymentInsert.data.id).eq('store_id',storeId).select('id').single();
+      if(paymentUpdate.error) throw paymentUpdate.error;
       const saleUpdate=await client.from('sales').update({notes:'debug ok'}).eq('id',saleId).eq('store_id',storeId).select('id').single();
       if(saleUpdate.error) throw saleUpdate.error;
       const saleDelete=await client.from('sales').delete().eq('id',saleId).eq('store_id',storeId);
@@ -6936,23 +6956,30 @@ if(config.webappUrl){loadFromSheets();}
         error:null,
         salesSelectOk:true,
         salesCount:salesCount||0,
+        saleItemsSelectOk:true,
+        saleItemsCount:itemsCount||0,
+        salePaymentsSelectOk:true,
+        salePaymentsCount:paymentsCount||0,
         salesInsertOk:true,
         saleItemsInsertOk:true,
         salePaymentsInsertOk:true,
+        salePaymentsUpdateOk:true,
         salesUpdateOk:true
       });
       console.groupEnd();
       showToast('Permisos write sales OK');
     }catch(err){
+      const schemaHint=inferSalesSchemaCacheMessage(err);
       console.error('[Sales debug permissions failed]',{
         message:err?.message||String(err),
         code:err?.code||'',
         details:err?.details||'',
         hint:err?.hint||'',
-        policyHint:inferSalesPolicyMessage(err)
+        policyHint:inferSalesPolicyMessage(err),
+        schemaHint
       });
       console.groupEnd();
-      showToast(`Write sales falló: ${err?.message||String(err)}`);
+      showToast(schemaHint||`Write sales falló: ${err?.message||String(err)}`);
     }
   };
 
