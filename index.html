@@ -5223,5 +5223,562 @@ if(config.webappUrl){loadFromSheets();}
   renderCrSupabaseUi();
 })();
 </script>
+<script>
+(()=>{
+  let expensesLoadState='local';
+  let expensesLastError='';
+  let expensesLastReadAt='';
+  let expensesLastSyncAt='';
+  let expensesCurrentRole='';
+  let expensesCurrentStoreName='';
+  let expensesSupabaseCount=0;
+
+  function getExpensesConfig(){
+    try{
+      return (typeof config==='object'&&config)?config:JSON.parse(localStorage.getItem('config')||'{}');
+    }catch(_){ return {}; }
+  }
+  function getExpensesStoreId(){
+    const cfg=getExpensesConfig();
+    return cfg.activeStoreId||'';
+  }
+  function hasExpensesSupabaseReady(){
+    const cfg=getExpensesConfig();
+    return !!(cfg.supabaseUrl&&cfg.supabaseAnonKey&&cfg.activeStoreId&&window.getSupabaseClient?.());
+  }
+  function stampExpensesMoment(){ return `${getLocalDateString()} ${getLocalTimeString()}`; }
+  function setExpensesState(state,error=''){
+    expensesLoadState=state;
+    expensesLastError=error||'';
+    renderExpensesSupabaseUi();
+  }
+  function getExpensesSourceLabel(){
+    if(expensesLoadState==='supabase') return 'Fuente gastos: Supabase';
+    if(expensesLoadState==='syncing') return 'Sincronizando gastos…';
+    if(expensesLoadState==='error') return `Gastos local · ${expensesLastError||'Error Supabase'}`;
+    return 'Fuente gastos: local / fallback';
+  }
+  function ensureExpensesSupabasePanel(){
+    const body=$('acc-body-menu');
+    if(!body) return;
+    if(body.querySelector('[data-expenses-sb-tools="true"]')) return;
+    const box=document.createElement('div');
+    box.setAttribute('data-expenses-sb-tools','true');
+    box.style.cssText='display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:0 0 12px 0;border-top:1px dashed var(--border);margin-top:10px;padding-top:12px;';
+    box.innerHTML=`
+      <div id="expenses-sb-status" style="font-size:12px;color:var(--ink3)">Fuente gastos: local / fallback</div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn ghost" type="button" onclick="debugExpensesWritePermissions()">Probar permisos write expenses</button>
+        <button class="btn ghost" type="button" onclick="reloadExpensesFromSupabase()">Recargar gastos desde Supabase</button>
+        <button class="btn ghost" type="button" onclick="syncLocalExpensesToSupabase()">Subir gastos actuales a Supabase</button>
+        <button class="btn ghost" type="button" onclick="debugExpensesSupabase()">Debug gastos</button>
+      </div>
+      <div id="expenses-sb-diag" style="font-size:12px;color:var(--ink2);background:var(--surf2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;line-height:1.5"></div>
+    `;
+    body.appendChild(box);
+  }
+  function renderExpensesSupabaseUi(){
+    ensureExpensesSupabasePanel();
+    const status=$('expenses-sb-status');
+    if(status) status.textContent=getExpensesSourceLabel();
+    const diag=$('expenses-sb-diag');
+    if(diag){
+      diag.innerHTML=`
+        <div><strong>Fuente gastos:</strong> ${expensesLoadState==='error'?'Fallback':expensesLoadState==='supabase'?'Supabase':'Local'}</div>
+        <div><strong>Store activa:</strong> ${expensesCurrentStoreName||'Sin store activa'}</div>
+        <div><strong>Store ID:</strong> ${getExpensesStoreId()||'—'}</div>
+        <div><strong>Rol:</strong> ${expensesCurrentRole||'—'}</div>
+        <div><strong>Cantidad local de gastos:</strong> ${gastos.length}</div>
+        <div><strong>Cantidad Supabase de gastos:</strong> ${expensesSupabaseCount}</div>
+        <div><strong>Último error:</strong> ${expensesLastError||'—'}</div>
+        <div><strong>Última lectura:</strong> ${expensesLastReadAt||'—'}</div>
+        <div><strong>Última sincronización:</strong> ${expensesLastSyncAt||'—'}</div>
+      `;
+    }
+  }
+  async function getExpensesSession(client){
+    const {data,error}=await client.auth.getSession();
+    if(error) throw error;
+    return data.session||null;
+  }
+  async function queryStoreExpenses(client,storeId){
+    const {data,error}=await client
+      .from('expenses')
+      .select('id,store_id,legacy_id,legacy_source,business_date,spent_at,description,amount,payment_method,operator_user_id,operator_name,notes,metadata,created_at,updated_at')
+      .eq('store_id',storeId)
+      .order('business_date',{ascending:false})
+      .order('spent_at',{ascending:false});
+    if(error) throw error;
+    return data||[];
+  }
+  async function fetchExpensesDiagnostics({includeRows=false}={}){
+    const storeId=getExpensesStoreId();
+    const base={storeId,storeName:'',role:'',rows:[],count:0,error:''};
+    const cfg=getExpensesConfig();
+    if(!(cfg.supabaseUrl&&cfg.supabaseAnonKey)) return base;
+    if(!storeId) return {...base,error:'No hay tienda activa'};
+    if(!window.isValidUuid?.(storeId)) return {...base,error:'Store ID inválido'};
+    const client=window.getSupabaseClient?.();
+    if(!client) return {...base,error:'Cliente Supabase no disponible'};
+    try{
+      const session=await getExpensesSession(client);
+      if(!session) return {...base,error:'No hay sesión activa'};
+      const [{data:storeRow,error:storeErr},{data:roleRow,error:roleErr},expenseRows]=await Promise.all([
+        client.from('stores').select('id,name').eq('id',storeId).maybeSingle(),
+        client.from('store_users').select('role').eq('store_id',storeId).eq('user_id',session.user.id).maybeSingle(),
+        queryStoreExpenses(client,storeId)
+      ]);
+      if(storeErr) throw storeErr;
+      if(roleErr) throw roleErr;
+      return {
+        ...base,
+        storeName:storeRow?.name||'',
+        role:roleRow?.role||'',
+        rows:includeRows?expenseRows:[],
+        count:expenseRows.length
+      };
+    }catch(err){
+      return {...base,error:err?.message||String(err)};
+    }
+  }
+  function parseSpentAtSafe(spentAt,businessDate){
+    if(spentAt){
+      const d=new Date(spentAt);
+      if(!Number.isNaN(d.getTime())) return d;
+    }
+    const parsed=parseLocalDateSafe(businessDate||'');
+    return parsed || new Date();
+  }
+  function mapExpenseFromSupabase(row){
+    const spentAt=parseSpentAtSafe(row.spent_at,row.business_date);
+    return{
+      id: normalizeLegacyFrontId(row.legacy_id || row.id),
+      _sb_id: row.id,
+      legacy_id: row.legacy_id || null,
+      fecha: row.business_date || getLocalDateString(spentAt),
+      hora: getLocalTimeString(spentAt),
+      desc: row.description || '',
+      monto: money2(row.amount),
+      pago: row.payment_method || 'efectivo',
+      operador: row.operator_name || '',
+      nota: row.notes || '',
+      metadata: row.metadata || {}
+    };
+  }
+  function mapExpenseToSupabase(expense,storeId,existingRow){
+    const businessDate=normalizeBusinessDate(expense?.fecha, expense?.spent_at || expense?.timestamp) || getLocalDateString();
+    const localTime=expense?.hora || getLocalTimeString();
+    const spentAtSource=parseLocalDateSafe(businessDate) || new Date();
+    if(expense?.hora){
+      const [hh,mm]=String(expense.hora).split(':');
+      if(hh!==undefined && mm!==undefined){
+        spentAtSource.setHours(Number(hh)||0,Number(mm)||0,0,0);
+      }
+    }
+    const payload={
+      store_id:storeId,
+      legacy_id: expense.legacy_id || (!window.isValidUuid?.(String(expense.id||'')) ? String(expense.id) : null),
+      legacy_source:'local_frontend',
+      business_date: businessDate,
+      spent_at: getLocalTimestamp(spentAtSource),
+      description: expense.desc || '',
+      amount: money2(expense.monto),
+      payment_method: normalizePaymentMethod(expense.pago||'ef'),
+      operator_name: expense.operador || null,
+      notes: expense.nota || null,
+      metadata:{
+        ...(existingRow?.metadata||{}),
+        local_hora: localTime
+      }
+    };
+    const sbId=existingRow?.id || expense._sb_id || (window.isValidUuid?.(String(expense.id||'')) ? String(expense.id) : '');
+    if(sbId) payload.id=sbId;
+    return payload;
+  }
+  async function findExistingExpenseRow(client,storeId,expense,expenseRows){
+    const rows=Array.isArray(expenseRows)&&expenseRows.length?expenseRows:await queryStoreExpenses(client,storeId);
+    const refLegacy=expense.legacy_id || (!window.isValidUuid?.(String(expense.id||'')) ? String(expense.id) : '');
+    return rows.find(r=>String(r.id||'')===String(expense._sb_id||'') || String(r.id||'')===String(expense.id||'') || (refLegacy && String(r.legacy_id||'')===String(refLegacy))) || null;
+  }
+  function logExpenseWriteError(meta,err){
+    console.error('[Expenses write failed]',{
+      operation:meta.operation,
+      payload:meta.payload,
+      storeId:meta.storeId,
+      currentRole:expensesCurrentRole||'',
+      localExpense:meta.localExpense,
+      existingRow:meta.existingRow||null,
+      message:err?.message||String(err),
+      code:err?.code||'',
+      details:err?.details||'',
+      hint:err?.hint||''
+    });
+  }
+  function inferExpensesPolicyForStep(step){
+    if(step==='select') return 'expenses_select_members';
+    if(step==='insert') return 'expenses_insert_ops';
+    if(step==='update') return 'expenses_update_ops';
+    if(step==='delete') return 'expenses_delete_admin';
+    return '';
+  }
+  function inferExpensesPolicyMessage(step,err){
+    const raw=`${err?.message||''} ${err?.details||''} ${err?.hint||''}`.toLowerCase();
+    if(err?.code==='42501' || raw.includes('row-level security') || raw.includes('permission denied') || raw.includes('violates row-level security')){
+      const policy=inferExpensesPolicyForStep(step);
+      return policy ? `Posible policy faltante o mal configurada: ${policy}` : 'Posible policy RLS faltante';
+    }
+    return '';
+  }
+  function getExpenseSupabaseErrorMessage(err){
+    if(!err) return 'Error desconocido';
+    return err.message || err.details || String(err);
+  }
+  function refreshExpensesUi(){
+    try{renderDashboard();}catch(_){}
+    try{renderGastos();}catch(_){}
+    try{renderAjustes();}catch(_){}
+  }
+  window.loadExpensesFromSupabase=async function({silent=false,expenseRowsOverride=null}={}){
+    if(!hasExpensesSupabaseReady()) return false;
+    try{
+      const diag=expenseRowsOverride?null:await fetchExpensesDiagnostics({includeRows:true});
+      if(diag){
+        expensesCurrentStoreName=diag.storeName||expensesCurrentStoreName;
+        expensesCurrentRole=diag.role||expensesCurrentRole;
+        expensesSupabaseCount=diag.count||expensesSupabaseCount;
+        expensesLastReadAt=stampExpensesMoment();
+        if(diag.error){
+          setExpensesState('error',diag.error);
+          if(!silent) showToast(`Gastos locales activos · ${diag.error}`);
+          return false;
+        }
+      }
+      const rows=expenseRowsOverride || diag.rows;
+      if(!Array.isArray(rows) || !rows.length){
+        if(!silent) showToast('Supabase sin gastos. Se mantiene local.');
+        setExpensesState('local');
+        renderExpensesSupabaseUi();
+        return false;
+      }
+      gastos=[...rows].map(mapExpenseFromSupabase).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')) || String(b.hora||'').localeCompare(String(a.hora||'')));
+      save();
+      refreshExpensesUi();
+      setExpensesState('supabase');
+      return true;
+    }catch(err){
+      console.error('[Expenses load failed]',err);
+      setExpensesState('error',err?.message||String(err));
+      if(!silent) showToast('Gastos locales activos · Error Supabase');
+      return false;
+    }
+  };
+  window.saveExpenseToSupabase=async function(expense,opts={}){
+    if(!expense) return null;
+    if(!hasExpensesSupabaseReady()){
+      console.warn('[Expenses save skipped] Supabase no configurado o sin store activa',{expense});
+      return null;
+    }
+    const client=window.getSupabaseClient?.();
+    if(!client) throw new Error('Cliente Supabase no disponible');
+    const storeId=getExpensesStoreId();
+    if(!storeId) throw new Error('No hay tienda activa');
+    if(!window.isValidUuid?.(storeId)) throw new Error('Store ID inválido');
+    const session=await getExpensesSession(client);
+    if(!session) throw new Error('No hay sesión activa');
+    const existingRow=await findExistingExpenseRow(client,storeId,expense,opts.expenseRows);
+    const payload=mapExpenseToSupabase(expense,storeId,existingRow);
+    const operation=existingRow ? 'update' : 'insert';
+    console.log('[Expenses -> Supabase]',{
+      operation,
+      expenseLocal:{...expense},
+      storeId,
+      currentRole:expensesCurrentRole||'',
+      payload,
+      existingRow:existingRow||null
+    });
+    try{
+      const res=existingRow
+        ? await client.from('expenses').update(payload).eq('id',existingRow.id).eq('store_id',storeId).select('id,store_id,legacy_id,business_date,spent_at,description,amount,payment_method,operator_name,notes,metadata,created_at').single()
+        : await client.from('expenses').insert(payload).select('id,store_id,legacy_id,business_date,spent_at,description,amount,payment_method,operator_name,notes,metadata,created_at').single();
+      console.log('[Expenses <- Supabase]',{
+        operation,
+        storeId,
+        data:res?.data||null,
+        message:res?.error?.message||'',
+        code:res?.error?.code||'',
+        details:res?.error?.details||'',
+        hint:res?.error?.hint||''
+      });
+      if(res.error) throw res.error;
+      expense._sb_id=res.data.id;
+      expense.legacy_id=res.data.legacy_id||expense.legacy_id||(!window.isValidUuid?.(String(expense.id||'')) ? String(expense.id) : null);
+      expense.fecha=res.data.business_date||expense.fecha;
+      expense.hora=getLocalTimeString(parseSpentAtSafe(res.data.spent_at,res.data.business_date));
+      save();
+      expensesLastSyncAt=stampExpensesMoment();
+      setExpensesState('supabase');
+      return res.data;
+    }catch(err){
+      const policyHint=inferExpensesPolicyMessage(operation,err);
+      logExpenseWriteError({operation,payload,storeId,localExpense:{...expense},existingRow},err);
+      if(policyHint) console.error('[Expenses policy hint]',policyHint);
+      throw err;
+    }
+  };
+  window.deleteExpenseFromSupabase=async function(expense,opts={}){
+    if(!hasExpensesSupabaseReady()||!expense) return null;
+    const client=window.getSupabaseClient?.();
+    const storeId=getExpensesStoreId();
+    const existingRow=await findExistingExpenseRow(client,storeId,expense,opts.expenseRows);
+    if(!existingRow) return null;
+    const {data,error}=await client.from('expenses').delete().eq('id',existingRow.id).eq('store_id',storeId).select('id').single();
+    if(error) throw error;
+    return data;
+  };
+  window.syncLocalExpensesToSupabase=async function(){
+    if(!hasExpensesSupabaseReady()){showToast('Configurá Supabase y una store activa primero');return;}
+    try{
+      setExpensesState('syncing');
+      const client=window.getSupabaseClient?.();
+      const storeId=getExpensesStoreId();
+      const existingRows=await queryStoreExpenses(client,storeId);
+      const summary={local:gastos.length,inserted:0,updated:0,errors:[]};
+      for(const expense of gastos){
+        try{
+          const existing=await findExistingExpenseRow(client,storeId,expense,existingRows);
+          const row=await saveExpenseToSupabase(expense,{expenseRows:existingRows});
+          if(row){
+            if(existing) summary.updated++;
+            else{ summary.inserted++; existingRows.push(row); }
+          }
+        }catch(err){
+          summary.errors.push(`${expense.desc||'Gasto'}: ${err?.message||err}`);
+        }
+      }
+      expensesLastSyncAt=stampExpensesMoment();
+      setExpensesState('supabase');
+      renderExpensesSupabaseUi();
+      console.log('[Expenses sync summary]',summary);
+      showToast(`✓ Gastos sync · ${summary.local} locales · ${summary.inserted} nuevos · ${summary.updated} actualizados${summary.errors.length?` · errores ${summary.errors.length}`:''}`);
+    }catch(err){
+      console.error('[Expenses sync failed]',err);
+      setExpensesState('error',err?.message||String(err));
+      showToast(`Gastos locales OK · Supabase rechazó sync: ${err?.message||err}`);
+    }
+  };
+  window.reloadExpensesFromSupabase=async function(silent=false){
+    try{
+      const diag=await fetchExpensesDiagnostics({includeRows:true});
+      expensesCurrentStoreName=diag.storeName||expensesCurrentStoreName;
+      expensesCurrentRole=diag.role||expensesCurrentRole;
+      expensesSupabaseCount=diag.count||expensesSupabaseCount;
+      expensesLastReadAt=stampExpensesMoment();
+      if(diag.error){
+        setExpensesState('error',diag.error);
+        if(!silent) showToast(`Fallback local · ${diag.error}`);
+        return false;
+      }
+      return await loadExpensesFromSupabase({silent:true,expenseRowsOverride:diag.rows});
+    }catch(err){
+      console.error('[Expenses optional load failed]',err);
+      setExpensesState('error',err?.message||String(err));
+      if(!silent) showToast(`Fallback local · ${err?.message||err}`);
+      return false;
+    }
+  };
+  window.debugExpensesSupabase=async function(){
+    const diag=await fetchExpensesDiagnostics({includeRows:true});
+    console.log('[debugExpensesSupabase]',{
+      currentStore:{id:diag.storeId,name:diag.storeName},
+      currentRole:diag.role,
+      localCount:gastos.length,
+      expensesSelect:diag.rows||[],
+      count:diag.count||0,
+      error:diag.error||expensesLastError||''
+    });
+    if(diag.error) showToast(`Debug gastos: ${diag.error}`);
+    else showToast('Debug gastos impreso en consola');
+  };
+  window.debugExpensesWritePermissions=async function(){
+    const result={
+      storeId:getExpensesStoreId(),
+      currentRole:expensesCurrentRole||'',
+      select:{ok:false,count:0,error:null},
+      insert:{ok:false,error:null,data:null},
+      update:{ok:false,error:null,data:null},
+      delete:{ok:false,error:null},
+      policyHint:'',
+      error:null
+    };
+    try{
+      if(!hasExpensesSupabaseReady()) throw new Error('Supabase no está configurado o falta store activa');
+      const client=window.getSupabaseClient?.();
+      if(!client) throw new Error('Cliente Supabase no disponible');
+      const storeId=getExpensesStoreId();
+      if(!storeId) throw new Error('No hay tienda activa');
+      if(!window.isValidUuid?.(storeId)) throw new Error('Store ID inválido');
+      const session=await getExpensesSession(client);
+      if(!session) throw new Error('No hay sesión activa');
+      const selectRes=await client.from('expenses').select('id,store_id,legacy_id,description,amount').eq('store_id',storeId).limit(5);
+      result.select={ok:!selectRes.error,count:(selectRes.data||[]).length,error:selectRes.error?{
+        message:selectRes.error.message||'',
+        code:selectRes.error.code||'',
+        details:selectRes.error.details||'',
+        hint:selectRes.error.hint||''
+      }:null};
+      if(selectRes.error) throw Object.assign(selectRes.error,{_step:'select'});
+      const tempLegacy=`debug_expense_${Date.now()}`;
+      const insertPayload={
+        store_id:storeId,
+        legacy_id:tempLegacy,
+        legacy_source:'debug',
+        business_date:getLocalDateString(),
+        spent_at:getLocalTimestamp(),
+        description:'Debug Gasto Temporal',
+        amount:1,
+        payment_method:'efectivo',
+        operator_name:'debugExpensesWritePermissions',
+        notes:'debug'
+      };
+      const insertRes=await client.from('expenses').insert(insertPayload).select('id,legacy_id,description,amount').single();
+      result.insert={ok:!insertRes.error,error:insertRes.error?{
+        message:insertRes.error.message||'',
+        code:insertRes.error.code||'',
+        details:insertRes.error.details||'',
+        hint:insertRes.error.hint||''
+      }:null,data:insertRes.data||null};
+      if(insertRes.error) throw Object.assign(insertRes.error,{_step:'insert'});
+      const updateRes=await client.from('expenses').update({description:'Debug Gasto Temporal'}).eq('id',insertRes.data.id).eq('store_id',storeId).select('id,description').single();
+      result.update={ok:!updateRes.error,error:updateRes.error?{
+        message:updateRes.error.message||'',
+        code:updateRes.error.code||'',
+        details:updateRes.error.details||'',
+        hint:updateRes.error.hint||''
+      }:null,data:updateRes.data||null};
+      if(updateRes.error) throw Object.assign(updateRes.error,{_step:'update'});
+      const deleteRes=await client.from('expenses').delete().eq('id',insertRes.data.id).eq('store_id',storeId).select('id').single();
+      result.delete={ok:!deleteRes.error,error:deleteRes.error?{
+        message:deleteRes.error.message||'',
+        code:deleteRes.error.code||'',
+        details:deleteRes.error.details||'',
+        hint:deleteRes.error.hint||''
+      }:null};
+      if(deleteRes.error){
+        result.policyHint=inferExpensesPolicyMessage('delete',deleteRes.error);
+        console.warn('[debugExpensesWritePermissions delete cleanup failed]',deleteRes.error);
+      }
+    }catch(err){
+      const step=err?._step || (result.update.error?'update':result.insert.error?'insert':result.select.error?'select':'');
+      const policyHint=inferExpensesPolicyMessage(step,err);
+      result.policyHint=policyHint||result.policyHint;
+      result.error={
+        step:step||'unknown',
+        message:err?.message||String(err),
+        code:err?.code||'',
+        details:err?.details||'',
+        hint:err?.hint||''
+      };
+    }
+    console.log('[debugExpensesWritePermissions]',result);
+    if(result.error) showToast(`Permisos expenses: ${result.error.step} falló · ${result.error.message}`);
+    else showToast('Permisos expenses OK. Ver consola para detalle');
+    return result;
+  };
+
+  const _renderGastosExpenses=window.renderGastos;
+  if(typeof _renderGastosExpenses==='function'){
+    window.renderGastos=function(...args){
+      const res=_renderGastosExpenses.apply(this,args);
+      renderExpensesSupabaseUi();
+      return res;
+    };
+  }
+  const _renderAjustesExpenses=window.renderAjustes;
+  if(typeof _renderAjustesExpenses==='function'){
+    window.renderAjustes=function(...args){
+      const res=_renderAjustesExpenses.apply(this,args);
+      renderExpensesSupabaseUi();
+      return res;
+    };
+  }
+  const _safeInitSupabaseAccessExpenses=window.safeInitSupabaseAccess;
+  if(typeof _safeInitSupabaseAccessExpenses==='function'){
+    window.safeInitSupabaseAccess=async function(...args){
+      const res=await _safeInitSupabaseAccessExpenses.apply(this,args);
+      setTimeout(()=>window.reloadExpensesFromSupabase?.(true),260);
+      return res;
+    };
+  }
+  const _guardarSupabaseConfigAdjExpenses=window.guardarSupabaseConfigAdj;
+  if(typeof _guardarSupabaseConfigAdjExpenses==='function'){
+    window.guardarSupabaseConfigAdj=async function(...args){
+      const res=await _guardarSupabaseConfigAdjExpenses.apply(this,args);
+      setTimeout(()=>window.reloadExpensesFromSupabase?.(true),260);
+      return res;
+    };
+  }
+  const _reconectarSupabaseExpenses=window.reconectarSupabase;
+  if(typeof _reconectarSupabaseExpenses==='function'){
+    window.reconectarSupabase=async function(...args){
+      const res=await _reconectarSupabaseExpenses.apply(this,args);
+      setTimeout(()=>window.reloadExpensesFromSupabase?.(true),260);
+      return res;
+    };
+  }
+  const _supabaseSignInExpenses=window.supabaseSignIn;
+  if(typeof _supabaseSignInExpenses==='function'){
+    window.supabaseSignIn=async function(...args){
+      const res=await _supabaseSignInExpenses.apply(this,args);
+      setTimeout(()=>window.reloadExpensesFromSupabase?.(true),260);
+      return res;
+    };
+  }
+  const _onSupabaseStoreChangeExpenses=window.onSupabaseStoreChange;
+  if(typeof _onSupabaseStoreChangeExpenses==='function'){
+    window.onSupabaseStoreChange=function(...args){
+      const res=_onSupabaseStoreChangeExpenses.apply(this,args);
+      setTimeout(()=>window.reloadExpensesFromSupabase?.(true),260);
+      return res;
+    };
+  }
+  const _loadFromSheetsExpenses=window.loadFromSheets;
+  if(typeof _loadFromSheetsExpenses==='function'){
+    window.loadFromSheets=async function(...args){
+      const res=await _loadFromSheetsExpenses.apply(this,args);
+      setTimeout(()=>window.reloadExpensesFromSupabase?.(true),260);
+      return res;
+    };
+  }
+  const _confirmarGastoOperadorExpenses=window.confirmarGastoOperador;
+  if(typeof _confirmarGastoOperadorExpenses==='function'){
+    window.confirmarGastoOperador=async function(...args){
+      const beforeIds=new Set(gastos.map(g=>String(g.id)));
+      const res=_confirmarGastoOperadorExpenses.apply(this,args);
+      const expense=gastos.find(g=>!beforeIds.has(String(g.id)));
+      if(expense && hasExpensesSupabaseReady()){
+        try{
+          await saveExpenseToSupabase(expense);
+          showToast('Gasto sincronizado con Supabase');
+        }catch(err){
+          const msg=getExpenseSupabaseErrorMessage(err);
+          setExpensesState('error',msg);
+          console.error('[confirmarGastoOperador -> saveExpenseToSupabase failed]',{
+            expense:{...expense},
+            message:err?.message||String(err),
+            code:err?.code||'',
+            details:err?.details||'',
+            hint:err?.hint||''
+          });
+          showToast(`Gasto guardado local, pero Supabase falló: ${msg}`);
+        }
+      }
+      return res;
+    };
+  }
+
+  renderExpensesSupabaseUi();
+  setTimeout(()=>window.reloadExpensesFromSupabase?.(true),280);
+})();
+</script>
 </body>
 </html>
