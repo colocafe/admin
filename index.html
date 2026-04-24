@@ -1210,11 +1210,41 @@ function save(){
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n).toLocaleString('es-AR');
 const fmtK=n=>n>=1000000?'$'+(n/1000000).toFixed(1).replace('.0','')+'M':n>=1000?'$'+Math.round(n/1000)+'k':fmt(n);
-function fmtFull(d){const D=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return `${D[d.getDay()]} ${d.getDate()} de ${M[d.getMonth()]} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
-function fmtShort(d){const D=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${D[d.getDay()]} ${d.getDate()} ${M[d.getMonth()]}`;}
-function today(){return new Date().toISOString().split('T')[0];}
-function nowISO(){return new Date().toISOString();}
-function nowT(){const n=new Date();return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;}
+function pad2(n){return String(n).padStart(2,'0');}
+function getLocalDateString(date=new Date()){return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}`;}
+function getLocalTimeString(date=new Date()){return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;}
+function getLocalTimestamp(date=new Date()){
+  const offset=-date.getTimezoneOffset(),sign=offset>=0?'+':'-',abs=Math.abs(offset);
+  return `${getLocalDateString(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3,'0')}${sign}${pad2(Math.floor(abs/60))}:${pad2(abs%60)}`;
+}
+function parseLocalDateSafe(value){
+  if(value instanceof Date)return new Date(value.getFullYear(),value.getMonth(),value.getDate(),12,0,0,0);
+  if(typeof value==='string'){
+    const m=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),12,0,0,0);
+    const d=new Date(value);
+    if(!Number.isNaN(d.getTime()))return d;
+  }
+  return new Date();
+}
+function addLocalDays(base,days){const d=new Date(base.getFullYear(),base.getMonth(),base.getDate(),12,0,0,0);d.setDate(d.getDate()+days);return d;}
+function normalizeBusinessDate(fecha,timestamp){
+  if(typeof fecha==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(fecha))return fecha;
+  if(fecha instanceof Date&&!Number.isNaN(fecha.getTime()))return getLocalDateString(fecha);
+  if(typeof fecha==='string'&&fecha){const d=parseLocalDateSafe(fecha);if(!Number.isNaN(d.getTime()))return getLocalDateString(d);}
+  if(timestamp){const d=parseLocalDateSafe(timestamp);if(!Number.isNaN(d.getTime()))return getLocalDateString(d);}
+  return today();
+}
+function normalizeBusinessTime(hora,timestamp){
+  if(typeof hora==='string'&&/^\d{2}:\d{2}$/.test(hora))return hora;
+  if(timestamp){const d=parseLocalDateSafe(timestamp);if(!Number.isNaN(d.getTime()))return getLocalTimeString(d);}
+  return '';
+}
+function fmtFull(value){const d=value instanceof Date?value:parseLocalDateSafe(value);const D=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return `${D[d.getDay()]} ${d.getDate()} de ${M[d.getMonth()]} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;}
+function fmtShort(value){const d=value instanceof Date?value:parseLocalDateSafe(value);const D=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${D[d.getDay()]} ${d.getDate()} ${M[d.getMonth()]}`;}
+function today(){return getLocalDateString();}
+function nowISO(){return getLocalTimestamp();}
+function nowT(){return getLocalTimeString();}
 function getCat(id){return cats.find(c=>c.id===id)||{name:'Sin cat',color:'#aaa',seccion:'cafeteria'};}
 function showToast(msg,ms=2200){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
 function tipoLabel(t){return t==='salon'?'Salón':t==='delivery'?'Delivery':'Take away';}
@@ -1222,7 +1252,7 @@ function tipoBadgeClass(t){return t==='salon'?'mesa-tipo-salon':t==='delivery'?'
 function carritoItemTotal(item){return(item.precio+(item.vars||[]).reduce((s,v)=>s+v.precio,0))*item.qty;}
 function carritoTotalFn(c){return Object.values(c).reduce((s,i)=>s+carritoItemTotal(i),0);}
 function stockStatus(p){if(p.ilimitado)return'ok';return p.stock<=0?'out':p.stock<=5?'low':'ok';}
-function dashRango(){const hoy=today();if(dashFiltro==='hoy')return{desde:hoy,hasta:hoy};if(dashFiltro==='semana'){const d=new Date();d.setDate(d.getDate()-6);return{desde:d.toISOString().split('T')[0],hasta:hoy};}if(dashFiltro==='mes'){const d=new Date();d.setDate(1);return{desde:d.toISOString().split('T')[0],hasta:hoy};}return{desde:$('dash-desde')?.value||hoy,hasta:$('dash-hasta')?.value||hoy};}
+function dashRango(){const hoy=today();if(dashFiltro==='hoy')return{desde:hoy,hasta:hoy};if(dashFiltro==='semana'){const d=addLocalDays(new Date(),-6);return{desde:getLocalDateString(d),hasta:hoy};}if(dashFiltro==='mes'){const d=new Date();d.setDate(1);return{desde:getLocalDateString(d),hasta:hoy};}return{desde:$('dash-desde')?.value||hoy,hasta:$('dash-hasta')?.value||hoy};}
 
 // ── Modal confirmación ────────────────────────────
 function pedirConfirm(msg,fn,labelOk='Eliminar',color='var(--red)',icon='⚠️'){
@@ -1343,7 +1373,7 @@ function mostrarResumenTurno(){
   // Por operador
   const porOp={};vt.forEach(v=>{if(!porOp[v.operador])porOp[v.operador]=0;porOp[v.operador]+=v.total;});
   $('turno-modal-body').innerHTML=`
-    <p style="font-size:12px;color:var(--ink3);margin-bottom:14px">Abierto: ${fmtFull(new Date(turno.apertura))}<br>Operador principal: <strong>${turno.operador}</strong></p>
+    <p style="font-size:12px;color:var(--ink3);margin-bottom:14px">Abierto: ${fmtFull(turno.apertura)}<br>Operador principal: <strong>${turno.operador}</strong></p>
     <div class="turno-resumen-grid">
       <div class="turno-stat"><div class="turno-stat-lbl">Fondo inicial</div><div class="turno-stat-val">${fmt(turno.fondoCaja)}</div></div>
       <div class="turno-stat"><div class="turno-stat-lbl">Total vendido</div><div class="turno-stat-val" style="color:var(--orange)">${fmt(tot)}</div></div>
@@ -1363,9 +1393,12 @@ function pedirCerrarTurno(ef,mp,tot,cafe,cocina){
   pedirConfirm(`Cerrar turno de ${turno.operador} — total ${fmt(tot)}`,()=>cerrarTurno(ef,mp,tot,cafe,cocina),'Cerrar turno','var(--green)','🏁');
 }
 async function cerrarTurno(ef,mp,tot,cafe,cocina){
-  const r={fecha:today(),operador:turno.operador,apertura:turno.apertura,cierre:nowISO(),fondoCaja:turno.fondoCaja,totalEf:ef,totalMp:mp,total:tot,totalCafeteria:cafe,totalCocina:cocina};
-  await sheetsPost({action:'addTurno',row:r});
+  if(!(turno&&turno.abierto)){showToast('No hay turno abierto');return;}
+  const turnoCerrado={...turno,ventasIds:[...(turno.ventasIds||[])]};
+  const cierre=new Date();
+  const r={fecha:getLocalDateString(cierre),operador:turnoCerrado.operador,apertura:turnoCerrado.apertura,cierre:getLocalTimestamp(cierre),fondoCaja:turnoCerrado.fondoCaja,totalEf:ef,totalMp:mp,total:tot,totalCafeteria:cafe,totalCocina:cocina};
   turno=null;save();renderTurnoPill();showToast('✓ Turno cerrado');
+  await sheetsPost({action:'addTurno',row:r});
 }
 
 // ══════════════════════════════════════════════════
@@ -1391,7 +1424,7 @@ async function loadFromSheets(){
   const data=await sheetsGet();
   if(!data||!data.ok){showToast('⚠️ No se pudo leer el Sheet');return;}
   let changed=false;
-  if(data.ventas&&data.ventas.length>0){ventas=data.ventas;changed=true;}
+  if(data.ventas&&data.ventas.length>0){ventas=data.ventas.map(v=>({...v,fecha:normalizeBusinessDate(v.fecha,v.timestamp),hora:normalizeBusinessTime(v.hora,v.timestamp)}));changed=true;}
   if(data.menu&&data.menu.length>0){
     menu=data.menu.map(p=>({...p,cat:(cats.find(c=>c.name===p.catNombre)||cats[0]||{}).id||cats[0]?.id,variantes:p.variantes||[]}));
     changed=true;
@@ -1656,8 +1689,10 @@ async function ejecutarCobro(operadorCobro){
   const esReserva=mesaActivaId&&mesaActivaId.startsWith('reserva_');
   const items=Object.values(carrito);
   const btn=$('btn-confirm');btn.disabled=true;btn.textContent='Cerrando…';
-  const fecha=today(),hora=nowT(),ts=nowISO();
-  const operador=operadorCobro||(turno&&turno.abierto?turno.operador:'Sin turno');
+  const momentoVenta=new Date();
+  const fecha=getLocalDateString(momentoVenta),hora=getLocalTimeString(momentoVenta),ts=getLocalTimestamp(momentoVenta);
+  const turnoActivo=turno&&turno.abierto?turno:null;
+  const operador=operadorCobro||(turnoActivo?turnoActivo.operador:'Sin turno');
   const ventaIds=[];
   let tipoVenta='salon',nombreMesa='';
   if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){tipoVenta=r.tipo||'salon';nombreMesa=r.nombre;}}
@@ -1675,10 +1710,10 @@ async function ejecutarCobro(operadorCobro){
       total:(item.precio+varsExtra)*item.qty,pago,cat:p?.cat};
   });
   ventas.push(...nuevas);
-  if(turno&&turno.abierto)turno.ventasIds=[...(turno.ventasIds||[]),...ventaIds];
+  if(turnoActivo)turnoActivo.ventasIds=[...(turnoActivo.ventasIds||[]),...ventaIds];
   if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){r.estado='pagada';r.pago=pago;}}
   else{mesas=mesas.filter(x=>x.id!==mesaActivaId);}
-  save();syncMesasSheets();if(turno&&turno.abierto)syncTurnoSheets();
+  save();syncMesasSheets();if(turnoActivo&&turno===turnoActivo)syncTurnoSheets();
   const ok=await syncVentasSheets(nuevas);
   showToast(ok?'✓ Venta guardada en Sheets':(config.webappUrl?'✓ Registrada (sin internet)':'✓ Venta registrada'));
   btn.disabled=false;btn.textContent='Cerrar y cobrar';
@@ -1938,8 +1973,8 @@ function renderDashboard(){
   const totalG=vg.reduce((s,g)=>s+g.monto,0);
   const ganancia=totalV-totalG;
   const txP=vh.length,promP=txP?Math.round(totalV/txP):0;
-  const ayer=new Date();ayer.setDate(ayer.getDate()-1);
-  const va=ventas.filter(v=>v.fecha===ayer.toISOString().split('T')[0]);
+  const ayer=addLocalDays(new Date(),-1);
+  const va=ventas.filter(v=>v.fecha===getLocalDateString(ayer));
   const totalAyer=va.reduce((s,v)=>s+v.total,0);
   const difPct=totalAyer>0?Math.round((totalV-totalAyer)/totalAyer*100):null;
 
@@ -1957,7 +1992,7 @@ function renderDashboard(){
 
   // Bar chart 7 días
   const dias7=[],lbls7=[];
-  for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);dias7.push(d.toISOString().split('T')[0]);lbls7.push(i===0?'Hoy':['D','L','M','X','J','V','S'][d.getDay()]);}
+  for(let i=6;i>=0;i--){const d=addLocalDays(new Date(),-i);dias7.push(getLocalDateString(d));lbls7.push(i===0?'Hoy':['D','L','M','X','J','V','S'][d.getDay()]);}
   const sem=dias7.map(f=>ventas.filter(v=>v.fecha===f).reduce((s,v)=>s+v.total,0));
   const maxV=Math.max(...sem,1);
   const barTtl=$('bar-chart-titulo');if(barTtl)barTtl.textContent='Últimos 7 días';
@@ -2017,7 +2052,7 @@ function renderHistVentas(){
   $('hist-list').innerHTML=entries.map(([fecha,rows],i)=>{
     const total=rows.reduce((s,v)=>s+v.total,0);
     const ef=rows.filter(v=>v.pago==='ef').length,mp=rows.filter(v=>v.pago==='mp').length;
-    const d=new Date(fecha+'T12:00:00');
+    const d=parseLocalDateSafe(fecha);
     // Group by mesa/transaction for detail view — show individual sales with hora+operador
     const ventasSorted=[...rows].sort((a,b)=>(a.hora||'').localeCompare(b.hora||''));
     return `<div class="hist-item">
