@@ -6437,6 +6437,10 @@ if(config.webappUrl){loadFromSheets();}
   let salesCurrentRole='';
   let salesCurrentStoreName='';
   let salesSupabaseCounts={sales:0,items:0,payments:0};
+  let salesPreviewCounts={sales:0,items:0,payments:0,total:0};
+  let salesPreviewLastReadAt='';
+  let salesPreviewLastError='';
+  let salesPreviewResult=null;
 
   window.isValidUuid=window.isValidUuid||function isValidUuid(value){
     return typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -6498,6 +6502,9 @@ if(config.webappUrl){loadFromSheets();}
         <button class="btn ghost" type="button" onclick="debugPendingSalesSync()">Debug ventas pendientes</button>
         <button class="btn ghost" type="button" onclick="markLastSaleAsManualTest()">Marcar última venta como prueba</button>
         <button class="btn ghost" type="button" onclick="listRecentLocalSaleTickets()">Mostrar últimos tickets locales</button>
+        <button class="btn ghost" type="button" onclick="loadSalesFromSupabasePreview()">Leer ventas Supabase preview</button>
+        <button class="btn ghost" type="button" onclick="compareLocalSalesVsSupabase()">Comparar ventas local vs Supabase</button>
+        <button class="btn ghost" type="button" onclick="debugSalesReadSupabase()">Debug lectura ventas</button>
       </div>
       <div id="sales-sb-diag" style="font-size:12px;color:var(--ink2);background:var(--surf2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;line-height:1.5"></div>
     `;
@@ -6513,6 +6520,9 @@ if(config.webappUrl){loadFromSheets();}
         const ticketCount=groupLocalSaleRowsByTicket(ventas||[]).length;
         const syncStats=getSalesSyncStats(ventas||[]);
         const storeId=getSalesStoreId();
+        const localGroups=groupLocalSaleRowsByTicket(ventas||[]);
+        const localTotal=money2(localGroups.reduce((sum,g)=>sum+money2(g.total),0));
+        const preview=salesPreviewResult?.comparison||null;
         diag.innerHTML=`
           <div><strong>Fuente ventas:</strong> ${salesWriteState==='error'?'Fallback':salesWriteState==='syncing'?'Sincronizando':'Local + Supabase write-through'}</div>
           <div><strong>Store activa:</strong> ${getSalesStoreName()}</div>
@@ -6521,10 +6531,15 @@ if(config.webappUrl){loadFromSheets();}
           <div><strong>Ventas locales:</strong> ${ticketCount} tickets · ${(ventas||[]).length} filas</div>
           <div><strong>Tickets sync:</strong> ${syncStats.synced||0} synced · ${syncStats.pending||0} pendientes · ${syncStats.error||0} error · ${syncStats.partial_error||0} partial_error</div>
           <div><strong>Conteos Supabase:</strong> ${salesSupabaseCounts.sales} sales · ${salesSupabaseCounts.items} items · ${salesSupabaseCounts.payments} payments</div>
+          <div><strong>Preview ventas Supabase:</strong> ${salesPreviewCounts.sales} tickets · ${salesPreviewCounts.items} items · ${salesPreviewCounts.payments} payments · total ${fmt(salesPreviewCounts.total||0)}</div>
+          <div><strong>Comparación preview:</strong> local ${localGroups.length} tickets / ${fmt(localTotal)} · Supabase ${salesPreviewCounts.sales} tickets / ${fmt(salesPreviewCounts.total||0)}</div>
+          <div><strong>Diferencia preview:</strong> ${preview?`${preview.missingLocalInSupabase.length} local no encontrados · ${preview.missingSupabaseInLocal.length} Supabase no encontrados · ${preview.totalDiffTickets.length} tickets con diferencia`: '—'}</div>
           <div><strong>Última sync ventas:</strong> ${salesLastSyncAt||'—'}</div>
           <div><strong>Último ticket sincronizado:</strong> ${salesLastTicket||'—'}</div>
           <div><strong>Último error ventas:</strong> ${salesLastError||(!storeId?'No hay tienda activa':'—')}</div>
           <div><strong>Última lectura:</strong> ${salesLastProbeAt||'—'}</div>
+          <div><strong>Última lectura preview:</strong> ${salesPreviewLastReadAt||'—'}</div>
+          <div><strong>Último error preview:</strong> ${salesPreviewLastError||'—'}</div>
         `;
       }
     }catch(err){
@@ -6732,6 +6747,18 @@ if(config.webappUrl){loadFromSheets();}
     }
     return '';
   }
+  function getSalesPreviewRange({desde='',hasta=''}={}){
+    const todayDate=getLocalDateString();
+    const defaultDesde=getLocalDateString(addLocalDays(new Date(),-6));
+    return{
+      desde:desde||defaultDesde,
+      hasta:hasta||todayDate
+    };
+  }
+  function shouldExcludePreviewSale(sale,opts={}){
+    if(opts.excludeManualTest===false) return false;
+    return !!(sale?.legacy_source==='debug' || sale?.metadata?.source==='debug' || sale?.metadata?.debug===true || sale?.metadata?.manual_test===true || sale?.metadata?.source==='manual_test' || sale?.operator_name==='Debug');
+  }
   function logSalesTableError(table,operation,payload,existingRow,err){
     console.error('[Sales Supabase table error]',{
       table,
@@ -6763,6 +6790,129 @@ if(config.webappUrl){loadFromSheets();}
       throw err;
     }
   }
+  window.loadSalesFromSupabasePreview=async function(opts={}){
+    const storeId=getSalesStoreId();
+    const client=getSalesSupabaseClient();
+    salesPreviewLastError='';
+    if(!hasSalesSupabaseReady()||!client){
+      salesPreviewLastError='Supabase no configurado para preview';
+      renderSalesSupabaseUi();
+      return null;
+    }
+    if(!storeId){
+      salesPreviewLastError='No hay tienda activa';
+      renderSalesSupabaseUi();
+      return null;
+    }
+    if(!isValidUuid(storeId)){
+      salesPreviewLastError='Store ID inválido';
+      renderSalesSupabaseUi();
+      return null;
+    }
+    try{
+      const session=await getSalesSession(client);
+      if(!session) throw new Error('No hay sesión activa');
+      const range=getSalesPreviewRange(opts);
+      let salesQuery=client
+        .from('sales')
+        .select('id,store_id,legacy_id,legacy_source,shift_id,customer_id,reservation_id,open_order_id,business_date,sold_at,operator_name,service_type,table_label,payment_mode,subtotal_amount,total_amount,notes,metadata')
+        .eq('store_id',storeId)
+        .gte('business_date',range.desde)
+        .lte('business_date',range.hasta)
+        .order('sold_at',{ascending:false});
+      if(opts.limit!==false) salesQuery=salesQuery.limit(Number(opts.limit)||100);
+      const {data:salesRows,error:salesErr}=await salesQuery;
+      if(salesErr) throw salesErr;
+      const filteredSales=(salesRows||[]).filter(s=>!shouldExcludePreviewSale(s,opts));
+      const saleIds=filteredSales.map(s=>s.id);
+      const itemRows=await loadSaleItemsFromSupabasePreview(saleIds);
+      const paymentRows=await loadSalePaymentsFromSupabasePreview(saleIds);
+      const itemMap={};
+      const paymentMap={};
+      itemRows.forEach(item=>{(itemMap[item.sale_id]||(itemMap[item.sale_id]=[])).push(item);});
+      paymentRows.forEach(payment=>{(paymentMap[payment.sale_id]||(paymentMap[payment.sale_id]=[])).push(payment);});
+      const comparableRows=filteredSales.flatMap(sale=>mapSupabaseSaleToComparableLocalRows(sale,itemMap[sale.id]||[],paymentMap[sale.id]||[]));
+      const salesTotal=money2(filteredSales.reduce((sum,s)=>sum+(Number(s.total_amount)||0),0));
+      salesPreviewCounts={sales:filteredSales.length,items:itemRows.length,payments:paymentRows.length,total:salesTotal};
+      salesPreviewLastReadAt=stampSalesMoment();
+      salesPreviewResult={
+        opts:{...opts,range},
+        sales:filteredSales,
+        items:itemRows,
+        payments:paymentRows,
+        comparableRows,
+        comparison:null
+      };
+      renderSalesSupabaseUi();
+      showToast(`Preview ventas Supabase: ${filteredSales.length} tickets`);
+      return salesPreviewResult;
+    }catch(err){
+      salesPreviewLastError=err?.message||String(err);
+      console.error('[Sales preview read failed]',{
+        message:err?.message||String(err),
+        code:err?.code||'',
+        details:err?.details||'',
+        hint:err?.hint||''
+      });
+      renderSalesSupabaseUi();
+      showToast(`Preview ventas falló: ${salesPreviewLastError}`);
+      return null;
+    }
+  };
+  window.loadSaleItemsFromSupabasePreview=async function(saleIds){
+    if(!Array.isArray(saleIds)||!saleIds.length) return [];
+    const client=getSalesSupabaseClient();
+    const storeId=getSalesStoreId();
+    const {data,error}=await client
+      .from('sale_items')
+      .select('id,store_id,sale_id,legacy_id,product_id,product_name,category_name,section,variant_summary,note,quantity,unit_price,variants_price,line_total,metadata')
+      .eq('store_id',storeId)
+      .in('sale_id',saleIds);
+    if(error) throw error;
+    return data||[];
+  };
+  window.loadSalePaymentsFromSupabasePreview=async function(saleIds){
+    if(!Array.isArray(saleIds)||!saleIds.length) return [];
+    const client=getSalesSupabaseClient();
+    const storeId=getSalesStoreId();
+    const {data,error}=await client
+      .from('sale_payments')
+      .select('id,store_id,sale_id,legacy_id,method,amount,business_date,paid_at,metadata')
+      .eq('store_id',storeId)
+      .in('sale_id',saleIds);
+    if(error) throw error;
+    return data||[];
+  };
+  window.mapSupabaseSaleToComparableLocalRows=function(sale,items,payments){
+    const paymentMode=sale?.payment_mode||((payments||[]).length>1?'mixed':'single');
+    const legacyPago=(sale?.metadata?.legacy_pago)||getLegacyPagoValue(normalizePaymentMethod(payments?.[0]?.method||'efectivo'));
+    const comparablePayments=(payments||[]).map(p=>({metodo:normalizePaymentMethod(p.method),monto:money2(p.amount)}));
+    return (items||[]).map(item=>({
+      id:item.legacy_id||item.id,
+      _preview_only:true,
+      ticket_id:sale.legacy_id||sale.id,
+      fecha:normalizeBusinessDate(sale.business_date,sale.sold_at),
+      hora:normalizeBusinessTime('',sale.sold_at),
+      timestamp:sale.sold_at||'',
+      operador:sale.operator_name||'',
+      mesa:sale.table_label||'',
+      tipo:sale.service_type||'salon',
+      payment_mode:paymentMode,
+      pagos:comparablePayments,
+      pago:legacyPago,
+      producto:item.product_name||'',
+      variantes:item.variant_summary||'',
+      nota:item.note||'',
+      categoria:item.category_name||'',
+      seccion:item.section||'cafeteria',
+      cantidad:Number(item.quantity)||0,
+      precioBase:money2(item.unit_price),
+      precioVars:money2(item.variants_price),
+      total:money2(item.line_total),
+      cat:item.metadata?.cat??null,
+      _sb_sale_id:sale.id
+    }));
+  };
   async function resolveSaleProductId(row,client,storeId,cache){
     cache=cache||{};
     const direct=row?._product_sb_id;
@@ -7063,6 +7213,80 @@ if(config.webappUrl){loadFromSheets();}
     });
     console.groupEnd();
     showToast(`Debug pendientes: ${pendingGroups.length} ticket(s)`);
+  };
+  window.compareLocalSalesVsSupabase=async function(opts={}){
+    const preview=salesPreviewResult||await loadSalesFromSupabasePreview(opts);
+    if(!preview) return null;
+    const localGroups=groupLocalSaleRowsByTicket(ventas||[]);
+    const remoteGroups=groupLocalSaleRowsByTicket(preview.comparableRows||[]);
+    const localMap={};
+    const remoteMap={};
+    localGroups.forEach(group=>{localMap[getStableSaleLegacyId(group)]=group;});
+    remoteGroups.forEach(group=>{remoteMap[getStableSaleLegacyId(group)]=group;});
+    const localIds=Object.keys(localMap);
+    const remoteIds=Object.keys(remoteMap);
+    const missingLocalInSupabase=localIds.filter(id=>!remoteMap[id]);
+    const missingSupabaseInLocal=remoteIds.filter(id=>!localMap[id]);
+    const totalDiffTickets=[];
+    const itemCountDiffTickets=[];
+    const paymentCountDiffTickets=[];
+    const paymentAmountDiffTickets=[];
+    [...new Set(localIds.filter(id=>remoteMap[id]))].forEach(id=>{
+      const localGroup=localMap[id];
+      const remoteGroup=remoteMap[id];
+      const localTotal=money2(localGroup.total);
+      const remoteTotal=money2(remoteGroup.total);
+      if(Math.abs(localTotal-remoteTotal)>1) totalDiffTickets.push({ticketId:id,localTotal,remoteTotal,diff:money2(remoteTotal-localTotal)});
+      if((localGroup.rows||[]).length!==(remoteGroup.rows||[]).length) itemCountDiffTickets.push({ticketId:id,localItems:(localGroup.rows||[]).length,remoteItems:(remoteGroup.rows||[]).length});
+      const localPayments=getTicketPayments(localGroup);
+      const remotePayments=getTicketPayments(remoteGroup);
+      if(localPayments.length!==remotePayments.length) paymentCountDiffTickets.push({ticketId:id,localPayments:localPayments.length,remotePayments:remotePayments.length});
+      const localPaymentTotal=money2(localPayments.reduce((sum,p)=>sum+(Number(p.monto)||0),0));
+      const remotePaymentTotal=money2(remotePayments.reduce((sum,p)=>sum+(Number(p.monto)||0),0));
+      if(Math.abs(localPaymentTotal-remotePaymentTotal)>1) paymentAmountDiffTickets.push({ticketId:id,localPaymentTotal,remotePaymentTotal,diff:money2(remotePaymentTotal-localPaymentTotal)});
+    });
+    const comparison={
+      local:{tickets:localGroups.length,rows:(ventas||[]).length,total:money2(localGroups.reduce((sum,g)=>sum+money2(g.total),0))},
+      supabase:{tickets:remoteGroups.length,rows:(preview.comparableRows||[]).length,total:money2(remoteGroups.reduce((sum,g)=>sum+money2(g.total),0)),payments:preview.payments?.length||0},
+      missingLocalInSupabase,
+      missingSupabaseInLocal,
+      totalDiffTickets,
+      itemCountDiffTickets,
+      paymentCountDiffTickets,
+      paymentAmountDiffTickets
+    };
+    salesPreviewResult={...preview,comparison};
+    renderSalesSupabaseUi();
+    console.group('[Sales preview compare]');
+    console.log(comparison);
+    if(missingLocalInSupabase.length) console.table(missingLocalInSupabase.map(ticketId=>({ticketId,status:'local_only'})));
+    if(missingSupabaseInLocal.length) console.table(missingSupabaseInLocal.map(ticketId=>({ticketId,status:'supabase_only'})));
+    if(totalDiffTickets.length) console.table(totalDiffTickets);
+    if(itemCountDiffTickets.length) console.table(itemCountDiffTickets);
+    if(paymentCountDiffTickets.length) console.table(paymentCountDiffTickets);
+    if(paymentAmountDiffTickets.length) console.table(paymentAmountDiffTickets);
+    console.groupEnd();
+    showToast(`Comparación ventas: ${missingLocalInSupabase.length} local-only · ${missingSupabaseInLocal.length} remote-only · ${totalDiffTickets.length} con diferencia`);
+    return comparison;
+  };
+  window.debugSalesReadSupabase=async function(opts={}){
+    const preview=await loadSalesFromSupabasePreview(opts);
+    console.group('[Sales Supabase read debug]');
+    console.log({
+      currentStore:{id:getSalesStoreId(),name:getSalesStoreName()},
+      currentRole:getSalesRole()||'',
+      previewCounts:salesPreviewCounts,
+      previewLastReadAt:salesPreviewLastReadAt||null,
+      previewLastError:salesPreviewLastError||null,
+      result:{
+        sales:preview?.sales?.length||0,
+        items:preview?.items?.length||0,
+        payments:preview?.payments?.length||0,
+        comparableRows:preview?.comparableRows?.length||0
+      }
+    });
+    console.groupEnd();
+    return preview;
   };
   window.listRecentLocalSaleTickets=function(limit=10){
     const groups=getRecentLocalSaleGroups(limit);
