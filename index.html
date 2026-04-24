@@ -1860,7 +1860,8 @@ async function ejecutarCobro(operadorCobro){
        _shift_sb_id:turnoActivo?turnoActivo._sb_id||null:null,
        _reservation_local_id:reservaActiva?.id||null,_reservation_sb_id:reservaActiva?._sb_id||null,
        _customer_local_id:reservaActiva?.clienteId||null,_customer_sb_id:clienteReserva?._sb_id||null,
-       _source_kind:esReserva?'reserva':'mesa'};
+       _source_kind:esReserva?'reserva':'mesa',
+       _sb_sync_status:'pending',_sb_sync_error:'',_sb_synced_at:'',_sb_retry_count:0};
    });
   ventas.push(...nuevas);
   if(turnoActivo)turnoActivo.ventasIds=[...(turnoActivo.ventasIds||[]),...ventaIds];
@@ -1873,7 +1874,8 @@ async function ejecutarCobro(operadorCobro){
     const salesSync=await window.saveSaleRowsToSupabase?.(nuevas);
     if(salesSync?.ok)showToast('Venta sincronizada con Supabase');
   }catch(err){
-    showToast(`Venta guardada local, pero Supabase falló: ${err?.message||String(err)}`);
+    const partial=String(err?._sb_sync_status||'').includes('partial')||String(err?.message||'').toLowerCase().includes('partial');
+    showToast(partial?`Venta guardada local, pero Supabase quedó parcial: ${err?.message||String(err)}`:`Venta guardada local, pero Supabase falló: ${err?.message||String(err)}`);
   }
   btn.disabled=false;btn.textContent='Cerrar y cobrar';
   renderVentas();
@@ -6492,6 +6494,8 @@ if(config.webappUrl){loadFromSheets();}
         <button class="btn ghost" type="button" onclick="debugSalesWritePermissions()">Probar permisos write sales</button>
         <button class="btn ghost" type="button" onclick="debugSalesSupabase()">Debug ventas</button>
         <button class="btn ghost" type="button" onclick="retryLastSaleSync()">Reintentar sync última venta local</button>
+        <button class="btn ghost" type="button" onclick="retryPendingSalesSync()">Reintentar sync ventas pendientes</button>
+        <button class="btn ghost" type="button" onclick="debugPendingSalesSync()">Debug ventas pendientes</button>
       </div>
       <div id="sales-sb-diag" style="font-size:12px;color:var(--ink2);background:var(--surf2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;line-height:1.5"></div>
     `;
@@ -6505,6 +6509,7 @@ if(config.webappUrl){loadFromSheets();}
       const diag=$('sales-sb-diag');
       if(diag){
         const ticketCount=groupLocalSaleRowsByTicket(ventas||[]).length;
+        const syncStats=getSalesSyncStats(ventas||[]);
         const storeId=getSalesStoreId();
         diag.innerHTML=`
           <div><strong>Fuente ventas:</strong> ${salesWriteState==='error'?'Fallback':salesWriteState==='syncing'?'Sincronizando':'Local + Supabase write-through'}</div>
@@ -6512,6 +6517,7 @@ if(config.webappUrl){loadFromSheets();}
           <div><strong>Store ID:</strong> ${storeId||'—'}</div>
           <div><strong>Rol:</strong> ${getSalesRole()||'—'}</div>
           <div><strong>Ventas locales:</strong> ${ticketCount} tickets · ${(ventas||[]).length} filas</div>
+          <div><strong>Tickets sync:</strong> ${syncStats.synced||0} synced · ${syncStats.pending||0} pendientes · ${syncStats.error||0} error · ${syncStats.partial_error||0} partial_error</div>
           <div><strong>Conteos Supabase:</strong> ${salesSupabaseCounts.sales} sales · ${salesSupabaseCounts.items} items · ${salesSupabaseCounts.payments} payments</div>
           <div><strong>Última sync ventas:</strong> ${salesLastSyncAt||'—'}</div>
           <div><strong>Último ticket sincronizado:</strong> ${salesLastTicket||'—'}</div>
@@ -6547,6 +6553,45 @@ if(config.webappUrl){loadFromSheets();}
       group.legacyId=getStableSaleLegacyId(group);
       group.fallbackKey=!group.ref?.ticket_id?group.legacyId:'';
       return group;
+    });
+  };
+  function getGroupSyncStatus(group){
+    const statuses=(group?.rows||[]).map(r=>r?._sb_sync_status||'').filter(Boolean);
+    if(!statuses.length) return 'pending';
+    if(statuses.includes('partial_error')) return 'partial_error';
+    if(statuses.includes('error')) return 'error';
+    if(statuses.every(s=>s==='synced')) return 'synced';
+    if(statuses.includes('pending')) return 'pending';
+    return statuses[0]||'pending';
+  }
+  function getGroupSyncMeta(group){
+    const rows=group?.rows||[];
+    const syncedAt=rows.map(r=>r?._sb_synced_at||'').filter(Boolean).sort().slice(-1)[0]||'';
+    const retryCount=rows.reduce((max,row)=>Math.max(max,Number(row?._sb_retry_count)||0),0);
+    const saleId=rows.map(r=>r?._sb_sale_id||'').find(Boolean)||'';
+    const error=rows.map(r=>r?._sb_sync_error||'').filter(Boolean).slice(-1)[0]||'';
+    return{
+      status:getGroupSyncStatus(group),
+      syncedAt,
+      retryCount,
+      saleId,
+      error
+    };
+  }
+  function getSalesSyncStats(rows){
+    const stats={total:0,synced:0,pending:0,error:0,partial_error:0};
+    groupLocalSaleRowsByTicket(rows).forEach(group=>{
+      const status=getGroupSyncMeta(group).status;
+      stats.total++;
+      if(stats[status]===undefined) stats[status]=0;
+      stats[status]++;
+    });
+    return stats;
+  }
+  window.findPendingSalesSyncGroups=function(rows=ventas){
+    return groupLocalSaleRowsByTicket(rows).filter(group=>{
+      const meta=getGroupSyncMeta(group);
+      return !meta.saleId || meta.status==='pending' || meta.status==='error' || meta.status==='partial_error';
     });
   };
   window.getStableSalePaymentLegacyId=function(group,payment,index){
@@ -6821,14 +6866,18 @@ if(config.webappUrl){loadFromSheets();}
   function markLocalSaleRowsSync(rows,{saleId,status,error=''}={}){
     const ids=new Set((rows||[]).map(r=>String(r.id||'')));
     let changed=false;
+    const syncStamp=status==='synced'?stampSalesMoment():'';
     ventas=(ventas||[]).map(v=>{
       if(!ids.has(String(v.id||''))) return v;
       changed=true;
+      const nextRetryCount=(status==='pending'||status==='error'||status==='partial_error') ? ((Number(v._sb_retry_count)||0)+1) : (Number(v._sb_retry_count)||0);
       return{
         ...v,
         _sb_sale_id:saleId||v._sb_sale_id||null,
         _sb_sync_status:status||v._sb_sync_status||'pending',
-        _sb_sync_error:error||''
+        _sb_sync_error:error||'',
+        _sb_synced_at:syncStamp||v._sb_synced_at||'',
+        _sb_retry_count:nextRetryCount
       };
     });
     if(changed) save();
@@ -6847,6 +6896,7 @@ if(config.webappUrl){loadFromSheets();}
     salesCurrentStoreName=getSalesStoreName();
     salesLastTicket=getStableSaleLegacyId(group);
     setSalesWriteState('syncing');
+    let saleId=null;
     console.group('[Sales -> Supabase]');
     console.log('group',group);
     try{
@@ -6866,7 +6916,7 @@ if(config.webappUrl){loadFromSheets();}
           })()
         : await saveSalesRowManual(client,'sales',storeId,salePayload,'id,legacy_id');
       console.log('sale result',saleData);
-      const saleId=saleData.id;
+      saleId=saleData.id;
       const itemsPayload=await Promise.all((group.rows||[]).map(row=>mapSaleItemToSupabaseItem(row,saleId,{client,storeId,cache:relationCache})));
       console.log('items payload',itemsPayload);
       const itemsData=[];
@@ -6883,13 +6933,14 @@ if(config.webappUrl){loadFromSheets();}
         paymentsData.push(paymentData);
       }
       console.log('payments result',paymentsData);
-      markLocalSaleRowsSync(group.rows,{saleId,status:'ok',error:''});
+      markLocalSaleRowsSync(group.rows,{saleId,status:'synced',error:''});
       salesLastSyncAt=stampSalesMoment();
       setSalesWriteState('ready');
       await refreshSalesDiagnostics({silent:true});
       console.groupEnd();
       return{ok:true,saleId,legacyId:saleData.legacy_id||salesLastTicket};
     }catch(err){
+      err._sb_sync_status=saleId?'partial_error':'error';
       console.error('sale result/error',{
         message:err?.message||String(err),
         code:err?.code||'',
@@ -6897,7 +6948,7 @@ if(config.webappUrl){loadFromSheets();}
         hint:err?.hint||'',
         policyHint:inferSalesPolicyMessage(err)
       });
-      markLocalSaleRowsSync(group.rows,{saleId:null,status:'partial_error',error:err?.message||String(err)});
+      markLocalSaleRowsSync(group.rows,{saleId:saleId||null,status:saleId?'partial_error':'error',error:err?.message||String(err)});
       setSalesWriteState('error',err?.message||String(err));
       console.groupEnd();
       throw err;
@@ -6910,6 +6961,7 @@ if(config.webappUrl){loadFromSheets();}
     let okCount=0;
     let lastResult=null;
     for(const group of groups){
+      markLocalSaleRowsSync(group.rows,{saleId:getGroupSyncMeta(group).saleId||null,status:'pending',error:''});
       lastResult=await saveSaleGroupToSupabase(group);
       if(lastResult?.ok) okCount++;
     }
@@ -6927,6 +6979,35 @@ if(config.webappUrl){loadFromSheets();}
     }catch(err){
       showToast(`No se pudo sincronizar la última venta: ${err?.message||String(err)}`);
     }
+  };
+  window.retryPendingSalesSync=async function(){
+    const pendingGroups=findPendingSalesSyncGroups(ventas||[]);
+    if(!pendingGroups.length){showToast('No hay ventas pendientes para sincronizar');return;}
+    let okCount=0;
+    for(const group of pendingGroups){
+      try{
+        await saveSaleGroupToSupabase(group);
+        okCount++;
+      }catch(_){}
+    }
+    renderSalesSupabaseUi();
+    if(okCount===pendingGroups.length) showToast(`Ventas pendientes sincronizadas: ${okCount}`);
+    else showToast(`Se sincronizaron ${okCount} de ${pendingGroups.length} ventas pendientes`);
+  };
+  window.debugPendingSalesSync=function(){
+    const pendingGroups=findPendingSalesSyncGroups(ventas||[]);
+    console.group('[Sales pending sync debug]');
+    console.log({
+      totalTickets:groupLocalSaleRowsByTicket(ventas||[]).length,
+      pendingTickets:pendingGroups.length,
+      pending:pendingGroups.map(group=>({
+        legacyId:getStableSaleLegacyId(group),
+        meta:getGroupSyncMeta(group),
+        rows:(group.rows||[]).map(r=>({id:r.id,status:r._sb_sync_status||'',saleId:r._sb_sale_id||'',error:r._sb_sync_error||''}))
+      }))
+    });
+    console.groupEnd();
+    showToast(`Debug pendientes: ${pendingGroups.length} ticket(s)`);
   };
 
   window.debugSalesWritePermissions=async function(){
