@@ -2740,14 +2740,14 @@ if(config.webappUrl){loadFromSheets();}
   }
 
   function ensureSupabaseAccordion(){
+    const accordions=[...document.querySelectorAll('.accordion')];
+    const gsAcc=accordions.find(acc => (acc.textContent||'').includes('Conexión Google Sheets'));
     const ajustesView=document.getElementById('v-ajustes');
-    if(!ajustesView) return;
-    if(document.getElementById('acc-supabase') && document.getElementById('acc-supabase')?.parentNode===ajustesView) return;
+    const targetParent=gsAcc?.parentNode || ajustesView || document.body;
+    if(!targetParent) return;
+    if(document.getElementById('acc-supabase') && document.getElementById('acc-supabase')?.parentNode===targetParent) return;
     const existing=document.getElementById('acc-supabase');
     if(existing && existing.parentNode) existing.parentNode.removeChild(existing);
-    const gsHead=ajustesView.querySelector('[onclick*="gsheets"]');
-    const gsAcc=gsHead ? gsHead.closest('.accordion') : null;
-    const targetParent=ajustesView;
     const panel=buildSupabaseAccordion();
     if(gsAcc && gsAcc.nextSibling) targetParent.insertBefore(panel, gsAcc.nextSibling);
     else targetParent.appendChild(panel);
@@ -2981,12 +2981,17 @@ if(config.webappUrl){loadFromSheets();}
     };
   }
 
+  let supabaseObserverTicking=false;
   const supabaseAccordionObserver=new MutationObserver(()=>{
-    ensureSupabaseAccordion();
-    renderSupabaseStatus();
+    if(supabaseObserverTicking) return;
+    supabaseObserverTicking=true;
+    requestAnimationFrame(()=>{
+      supabaseObserverTicking=false;
+      ensureSupabaseAccordion();
+      renderSupabaseStatus();
+    });
   });
-  const ajustesNode=document.getElementById('v-ajustes');
-  if(ajustesNode) supabaseAccordionObserver.observe(ajustesNode,{childList:true});
+  supabaseAccordionObserver.observe(document.body,{childList:true,subtree:true});
 
   ensureSupabaseConfigShape();
   ensureSupabaseHeaderPill();
