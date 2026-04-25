@@ -775,13 +775,6 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <span style="display:none">Growi</span>
       </div>
     </div>
-    <div class="settings-note" id="ajustes-settings-note">
-      <strong>Operación.</strong> Revisá tu cuenta, la tienda activa y el estado general de la operación.
-    </div>
-
-    <!-- Sección modo técnico: solo visible para owner/admin -->
-    <div id="tech-mode-section" style="display:none"></div>
-
     <!-- ACCORDION: Menú -->
     <div class="accordion-item" id="acc-menu">
       <div class="accordion-hdr" onclick="toggleAccordion('menu')">
@@ -814,6 +807,9 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         </div>
       </div>
     </div>
+
+    <!-- Card modo técnico: solo owner/admin, debajo de Menú -->
+    <div id="tech-mode-section" style="display:none"></div>
 
     <!-- ACCORDION: Sheets (solo modo técnico) -->
     <div class="accordion-item" id="acc-sheets" style="display:none">
@@ -2554,7 +2550,7 @@ function addCatFromModal(){ abrirNuevaCatDesdeProducto('ajustes'); }
 function populateCatSelect(){const el=$('m-cat');if(el)el.innerHTML=cats.sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');}
 function toggleIlimitado(){const ilim=$('m-ilimitado')?.checked;$('m-stock-wrap').style.display=ilim?'none':'block';}
 function adjProdStock(id,d){const p=menu.find(x=>sameId(x.id,id));if(!p||p.ilimitado)return;p.stock=Math.max(0,(p.stock||0)+d);save();renderMenuAdm();renderStockAlerts();syncMenuSheets();}
-function setProdStock(id,val){const p=menu.find(x=>sameId(x.id,id));if(!p)return;p.stock=Math.max(0,parseInt(val)||0);save();renderMenuAdm();renderStockAlerts();syncMenuSheets();}
+function setProdStock(id,val){const p=menu.find(x=>sameId(x.id,id));if(!p||p.ilimitado)return;const parsed=parseInt(val,10);p.stock=Math.max(0,isNaN(parsed)?0:parsed);save();renderMenuAdm();renderStockAlerts();syncMenuSheets();}
 function toggleProdIlimitado(id,checked){const p=menu.find(x=>sameId(x.id,id));if(!p)return;p.ilimitado=checked;save();renderMenuAdm();renderStockAlerts();syncMenuSheets();}
 
 function renderMenuAdm(){
@@ -2568,15 +2564,18 @@ function renderMenuAdm(){
     <span class="prod-adm-nombre">${p.name}</span>
     <span class="prod-adm-precio">${fmt(p.price)}</span>
     <div class="prod-adm-stock-ctrl" style="${p.ilimitado?'display:none':''}">
-      <button class="qty-btn" onclick="adjProdStock(${p.id},-1)">−</button>
-      <input class="prod-adm-stock-num" type="number" value="${p.stock}" min="0" onchange="setProdStock(${p.id},this.value)" onblur="setProdStock(${p.id},this.value)">
-      <button class="qty-btn" onclick="adjProdStock(${p.id},1)">+</button>
+      <button class="qty-btn" type="button" onclick="adjProdStock('${p.id}',-1)">−</button>
+      <input class="prod-adm-stock-num" type="number" value="${p.ilimitado?0:(p.stock||0)}" min="0"
+        onchange="setProdStock('${p.id}',this.value)"
+        onblur="setProdStock('${p.id}',this.value)"
+        onkeydown="if(event.key==='Enter'){setProdStock('${p.id}',this.value);this.blur();}">
+      <button class="qty-btn" type="button" onclick="adjProdStock('${p.id}',1)">+</button>
     </div>
-    <label class="ilim-toggle"><input type="checkbox" ${p.ilimitado?'checked':''} onchange="toggleProdIlimitado(${p.id},this.checked)"> ∞</label>
-    <div class="icon-btn" onclick="openProdModal(${p.id})" title="Editar">
+    <label class="ilim-toggle"><input type="checkbox" ${p.ilimitado?'checked':''} onchange="toggleProdIlimitado('${p.id}',this.checked)"> ∞</label>
+    <div class="icon-btn" onclick="openProdModal('${p.id}')" title="Editar">
       <svg viewBox="0 0 16 16" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2l3 3L5 14H2v-3L11 2z"/></svg>
     </div>
-    <button class="cat-del" onclick="pedirEliminarProductoInline(${p.id})" title="Eliminar">×</button>
+    <button class="cat-del" onclick="pedirEliminarProductoInline('${p.id}')" title="Eliminar">×</button>
   </div>`;}).join('');
 }
 
@@ -2607,7 +2606,8 @@ function guardarProducto(){
   const name=($('m-nombre')?.value||'').trim(),price=parseInt($('m-precio')?.value),cat=$('m-cat')?.value;
   if(!name||!price){showToast('Completá nombre y precio');return;}
   const ilimitado=!!$('m-ilimitado')?.checked;
-  const stock=ilimitado?0:parseInt($('m-stock')?.value)||0;
+  // No resetear stock a 0 al marcar ilimitado — conservar el valor para cuando se desactive
+  const stock=Math.max(0,parseInt($('m-stock')?.value)||0);
   if(editId){Object.assign(menu.find(x=>sameId(x.id,editId)),{name,price,cat,stock,ilimitado,variantes:_variantesEdit});}
   else{menu.push({id:menu.reduce((m,p)=>Math.max(m,p.id),0)+1,name,price,cat,stock,ilimitado,variantes:_variantesEdit});}
   save();renderMenuAdm();renderProdGrid();renderCargaCats();syncMenuSheets();closeProdModal();showToast(editId?'✓ Actualizado':'✓ Agregado');
@@ -3224,12 +3224,20 @@ if(config.webappUrl){loadFromSheets();}
     // Google Sheets: solo visible en modo técnico
     const sheetsAcc=document.getElementById('acc-sheets');
     if(sheetsAcc) sheetsAcc.style.display=canTech?'':'none';
-    // Botón modo técnico: visible para owner/admin logueados
+    // Card modo técnico: mismo formato visual que accordion Menú y Datos locales
     const techSection=document.getElementById('tech-mode-section');
     if(techSection){
       if(loggedIn && isAdmin){
         techSection.style.display='';
-        techSection.innerHTML=`<div style="margin-bottom:12px"><button class="btn ghost" type="button" style="font-size:12px;color:var(--ink3);border-color:var(--border)" onclick="toggleSalesTechnicalMode()">${canTech?'⚙️ Desactivar modo técnico':'⚙️ Activar modo técnico'}</button>${canTech?' <span style="font-size:11px;color:var(--orange);font-weight:500">Modo técnico activo</span>':''}</div>`;
+        techSection.innerHTML=`<div class="accordion-item" style="margin-bottom:10px${canTech?';border-color:rgba(185,76,30,.25);background:rgba(251,232,222,.35)':''}">
+  <div class="accordion-hdr" style="cursor:default">
+    <div>
+      <div class="accordion-titulo" style="display:flex;align-items:center;gap:8px">Modo técnico${canTech?'<span style="font-size:10px;font-weight:600;color:var(--orange);background:var(--orange-bg);padding:2px 7px;border-radius:20px;letter-spacing:.04em">ACTIVO</span>':''}</div>
+      <div class="accordion-meta">Herramientas avanzadas para administración</div>
+    </div>
+    <button class="btn ghost" type="button" style="font-size:12px;flex-shrink:0" onclick="toggleSalesTechnicalMode()">${canTech?'Desactivar':'Activar'}</button>
+  </div>
+</div>`;
       }else{
         techSection.style.display='none';
         techSection.innerHTML='';
@@ -4212,6 +4220,29 @@ if(config.webappUrl){loadFromSheets();}
     if(error) throw error;
     return data;
   };
+  // Actualización rápida y segura de stock/unlimited — sin tocar category_id
+  window.saveProductStockToSupabase=async function(product){
+    if(!hasCatalogSupabaseReady()||!product) return null;
+    const client=getCatalogSupabaseClient();
+    if(!client) return null;
+    const storeId=getCatalogStoreId();
+    if(!storeId||!isValidUuid(storeId)) return null;
+    const session=await getCatalogSession(client);
+    if(!session) return null; // Sin sesión: falla silenciosa
+    const sbId=product._sb_id||(isValidUuid(String(product.id||''))?String(product.id):'');
+    if(sbId){
+      // UPDATE directo con sólo los campos de stock — sin FK de category_id
+      const {error}=await client.from('products')
+        .update({stock:Math.max(0,Number(product.stock)||0),unlimited:!!product.ilimitado})
+        .eq('id',sbId)
+        .eq('store_id',storeId);
+      if(error) throw error;
+      return true;
+    }
+    // Sin _sb_id: caer al save completo (INSERT o búsqueda por legacy_id)
+    return window.saveProductToSupabase(product,{categoryRows:cats});
+  };
+
   window.syncLocalCatalogToSupabase=async function(){
     if(!hasCatalogSupabaseReady()){
       showToast('Configurá Supabase y una store activa primero');
@@ -4476,7 +4507,7 @@ if(config.webappUrl){loadFromSheets();}
     window.setProdStock=function(id,val,...args){
       const res=_setProdStock.call(this,id,val,...args);
       const product=menu.find(p=>String(p.id)===String(id));
-      if(product) saveProductToSupabase(product,{categoryRows:cats}).catch(err=>warnSupabaseCatalogFailure('producto',err));
+      if(product) window.saveProductStockToSupabase(product).catch(err=>warnSupabaseCatalogFailure('stock',err));
       return res;
     };
   }
@@ -4485,7 +4516,7 @@ if(config.webappUrl){loadFromSheets();}
     window.adjProdStock=function(id,d,...args){
       const res=_adjProdStock.call(this,id,d,...args);
       const product=menu.find(p=>String(p.id)===String(id));
-      if(product) saveProductToSupabase(product,{categoryRows:cats}).catch(err=>warnSupabaseCatalogFailure('producto',err));
+      if(product) window.saveProductStockToSupabase(product).catch(err=>warnSupabaseCatalogFailure('stock',err));
       return res;
     };
   }
@@ -4494,7 +4525,7 @@ if(config.webappUrl){loadFromSheets();}
     window.toggleProdIlimitado=function(id,checked,...args){
       const res=_toggleProdIlimitado.call(this,id,checked,...args);
       const product=menu.find(p=>String(p.id)===String(id));
-      if(product) saveProductToSupabase(product,{categoryRows:cats}).catch(err=>warnSupabaseCatalogFailure('producto',err));
+      if(product) window.saveProductStockToSupabase(product).catch(err=>warnSupabaseCatalogFailure('stock',err));
       return res;
     };
   }
