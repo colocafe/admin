@@ -6441,6 +6441,9 @@ if(config.webappUrl){loadFromSheets();}
   let salesPreviewLastReadAt='';
   let salesPreviewLastError='';
   let salesPreviewResult=null;
+  let salesAutoSyncRunning=false;
+  let salesAutoSyncLastRunAt=0;
+  const SALES_AUTO_SYNC_COOLDOWN_MS=30000;
 
   window.isValidUuid=window.isValidUuid||function isValidUuid(value){
     return typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -6465,6 +6468,17 @@ if(config.webappUrl){loadFromSheets();}
   function getSalesRole(){
     return window.getActiveStoreRole?.()||salesCurrentRole||'';
   }
+  function canSeeSalesTechnicalTools(){
+    return ['owner','admin'].includes((getSalesRole()||'').toLowerCase());
+  }
+  function isSalesTechnicalModeEnabled(){
+    return localStorage.getItem('sales_technical_mode')==='1';
+  }
+  window.toggleSalesTechnicalMode=function(force){
+    const next=typeof force==='boolean'?force:!isSalesTechnicalModeEnabled();
+    localStorage.setItem('sales_technical_mode',next?'1':'0');
+    renderSalesSupabaseUi();
+  };
   function hasSalesSupabaseReady(){
     const cfg=getSalesConfig();
     return !!(cfg.supabaseUrl&&cfg.supabaseAnonKey&&window.getSupabaseClient?.()&&getSalesStoreId());
@@ -6494,19 +6508,12 @@ if(config.webappUrl){loadFromSheets();}
     box.style.cssText='display:flex;flex-direction:column;gap:10px;padding:0 0 12px 0;';
     box.innerHTML=`
       <div id="sales-sb-status" style="font-size:12px;color:var(--ink3)">Fuente ventas: Local + Supabase write-through</div>
-      <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn ghost" type="button" onclick="debugSalesWritePermissions()">Probar permisos write sales</button>
-        <button class="btn ghost" type="button" onclick="debugSalesSupabase()">Debug ventas</button>
-        <button class="btn ghost" type="button" onclick="retryLastSaleSync()">Reintentar sync última venta local</button>
-        <button class="btn ghost" type="button" onclick="retryPendingSalesSync()">Reintentar sync ventas pendientes</button>
-        <button class="btn ghost" type="button" onclick="debugPendingSalesSync()">Debug ventas pendientes</button>
-        <button class="btn ghost" type="button" onclick="markLastSaleAsManualTest()">Marcar última venta como prueba</button>
-        <button class="btn ghost" type="button" onclick="listRecentLocalSaleTickets()">Mostrar últimos tickets locales</button>
-        <button class="btn ghost" type="button" onclick="loadSalesFromSupabasePreview()">Leer ventas Supabase preview</button>
-        <button class="btn ghost" type="button" onclick="compareLocalSalesVsSupabase()">Comparar ventas local vs Supabase</button>
-        <button class="btn ghost" type="button" onclick="debugSalesReadSupabase()">Debug lectura ventas</button>
-      </div>
       <div id="sales-sb-diag" style="font-size:12px;color:var(--ink2);background:var(--surf2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;line-height:1.5"></div>
+      <details id="sales-tech-box" style="display:none;background:var(--surf2);border:1px solid var(--border);border-radius:12px;padding:10px 12px">
+        <summary style="cursor:pointer;font-weight:700">Herramientas técnicas</summary>
+        <div id="sales-tech-toggle" style="margin-top:10px"></div>
+        <div id="sales-tech-buttons" class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px"></div>
+      </details>
     `;
     body.insertBefore(box, body.firstChild);
   }
@@ -6524,11 +6531,13 @@ if(config.webappUrl){loadFromSheets();}
         const localTotal=money2(localGroups.reduce((sum,g)=>sum+money2(g.total),0));
         const preview=salesPreviewResult?.comparison||null;
         diag.innerHTML=`
+          <div><strong>Estado Supabase:</strong> ${hasSalesSupabaseReady()?'Conectado':'Sin conexión'}</div>
           <div><strong>Fuente ventas:</strong> ${salesWriteState==='error'?'Fallback':salesWriteState==='syncing'?'Sincronizando':'Local + Supabase write-through'}</div>
           <div><strong>Store activa:</strong> ${getSalesStoreName()}</div>
           <div><strong>Store ID:</strong> ${storeId||'—'}</div>
           <div><strong>Rol:</strong> ${getSalesRole()||'—'}</div>
           <div><strong>Ventas locales:</strong> ${ticketCount} tickets · ${(ventas||[]).length} filas</div>
+          <div><strong>Ventas pendientes de sincronizar:</strong> ${(syncStats.pending||0)+(syncStats.error||0)+(syncStats.partial_error||0)}</div>
           <div><strong>Tickets sync:</strong> ${syncStats.synced||0} synced · ${syncStats.pending||0} pendientes · ${syncStats.error||0} error · ${syncStats.partial_error||0} partial_error</div>
           <div><strong>Conteos Supabase:</strong> ${salesSupabaseCounts.sales} sales · ${salesSupabaseCounts.items} items · ${salesSupabaseCounts.payments} payments</div>
           <div><strong>Preview ventas Supabase:</strong> ${salesPreviewCounts.sales} tickets · ${salesPreviewCounts.items} items · ${salesPreviewCounts.payments} payments · total ${fmt(salesPreviewCounts.total||0)}</div>
@@ -6541,6 +6550,28 @@ if(config.webappUrl){loadFromSheets();}
           <div><strong>Última lectura preview:</strong> ${salesPreviewLastReadAt||'—'}</div>
           <div><strong>Último error preview:</strong> ${salesPreviewLastError||'—'}</div>
         `;
+      }
+      const techBox=$('sales-tech-box');
+      const techToggle=$('sales-tech-toggle');
+      const techButtons=$('sales-tech-buttons');
+      if(techBox&&techToggle&&techButtons){
+        const canSee=canSeeSalesTechnicalTools();
+        const enabled=isSalesTechnicalModeEnabled();
+        techBox.style.display=canSee?'block':'none';
+        techToggle.innerHTML=canSee?`<button class="btn ghost" type="button" onclick="toggleSalesTechnicalMode(${enabled?'false':'true'})">${enabled?'Ocultar modo técnico':'Activar modo técnico'}</button>`:'';
+        techButtons.style.display=canSee&&enabled?'flex':'none';
+        techButtons.innerHTML=canSee&&enabled?`
+          <button class="btn ghost" type="button" onclick="debugSalesWritePermissions()">Probar permisos write sales</button>
+          <button class="btn ghost" type="button" onclick="debugSalesSupabase()">Debug ventas</button>
+          <button class="btn ghost" type="button" onclick="retryLastSaleSync()">Reintentar sync última venta local</button>
+          <button class="btn ghost" type="button" onclick="retryPendingSalesSync()">Reintentar sync ventas pendientes</button>
+          <button class="btn ghost" type="button" onclick="debugPendingSalesSync()">Debug ventas pendientes</button>
+          <button class="btn ghost" type="button" onclick="markLastSaleAsManualTest()">Marcar última venta como prueba</button>
+          <button class="btn ghost" type="button" onclick="listRecentLocalSaleTickets()">Mostrar últimos tickets locales</button>
+          <button class="btn ghost" type="button" onclick="loadSalesFromSupabasePreview()">Leer ventas Supabase preview</button>
+          <button class="btn ghost" type="button" onclick="compareLocalSalesVsSupabase()">Comparar ventas local vs Supabase</button>
+          <button class="btn ghost" type="button" onclick="debugSalesReadSupabase()">Debug lectura ventas</button>
+        `:'';
       }
     }catch(err){
       console.warn('[Sales render diagnostic failed]',err);
@@ -7214,6 +7245,41 @@ if(config.webappUrl){loadFromSheets();}
     console.groupEnd();
     showToast(`Debug pendientes: ${pendingGroups.length} ticket(s)`);
   };
+  window.autoRetryPendingSalesSync=async function({force=false,reason='auto'}={}){
+    if(salesAutoSyncRunning) return {ok:false,reason:'running'};
+    const now=Date.now();
+    if(!force && now-salesAutoSyncLastRunAt<SALES_AUTO_SYNC_COOLDOWN_MS) return {ok:false,reason:'cooldown'};
+    if(!hasSalesSupabaseReady()) return {ok:false,reason:'supabase_not_ready'};
+    const pendingGroups=findPendingSalesSyncGroups(ventas||[]).slice(0,10);
+    if(!pendingGroups.length) return {ok:true,reason:'empty',synced:0,pending:0};
+    salesAutoSyncRunning=true;
+    salesAutoSyncLastRunAt=now;
+    let synced=0;
+    try{
+      for(const group of pendingGroups){
+        try{
+          await saveSaleGroupToSupabase(group);
+          synced++;
+        }catch(err){
+          console.warn('[Sales auto retry group failed]',{
+            reason,
+            legacyId:getStableSaleLegacyId(group),
+            message:err?.message||String(err),
+            code:err?.code||'',
+            details:err?.details||'',
+            hint:err?.hint||''
+          });
+        }
+      }
+      console.log('[Sales auto retry summary]',{reason,pending:pendingGroups.length,synced});
+      if(synced>0) showToast(`Ventas pendientes sincronizadas: ${synced}`);
+      renderSalesSupabaseUi();
+      return {ok:true,reason,pending:pendingGroups.length,synced};
+    }finally{
+      salesAutoSyncRunning=false;
+      salesAutoSyncLastRunAt=Date.now();
+    }
+  };
   window.compareLocalSalesVsSupabase=async function(opts={}){
     const preview=salesPreviewResult||await loadSalesFromSupabasePreview(opts);
     if(!preview) return null;
@@ -7545,6 +7611,7 @@ commit;`;
       const result=await _safeInitSupabaseAccessSales.apply(this,args);
       renderSalesSupabaseUi();
       refreshSalesDiagnostics({silent:true}).catch(err=>console.warn('[Sales diagnostics init failed]',err));
+      window.autoRetryPendingSalesSync?.({reason:'init'}).catch(err=>console.warn('[Sales auto retry init failed]',err));
       return result;
     };
   }
@@ -7553,6 +7620,7 @@ commit;`;
     window.guardarSupabaseConfigAdj=async function(...args){
       const result=await _guardarSupabaseConfigAdjSales.apply(this,args);
       refreshSalesDiagnostics({silent:true}).catch(err=>console.warn('[Sales diagnostics config failed]',err));
+      window.autoRetryPendingSalesSync?.({reason:'config'}).catch(err=>console.warn('[Sales auto retry config failed]',err));
       return result;
     };
   }
@@ -7561,6 +7629,7 @@ commit;`;
     window.reconectarSupabase=async function(...args){
       const result=await _reconectarSupabaseSales.apply(this,args);
       refreshSalesDiagnostics({silent:true}).catch(err=>console.warn('[Sales diagnostics reconnect failed]',err));
+      window.autoRetryPendingSalesSync?.({reason:'reconnect'}).catch(err=>console.warn('[Sales auto retry reconnect failed]',err));
       return result;
     };
   }
@@ -7569,6 +7638,7 @@ commit;`;
     window.supabaseSignIn=async function(...args){
       const result=await _supabaseSignInSales.apply(this,args);
       refreshSalesDiagnostics({silent:true}).catch(err=>console.warn('[Sales diagnostics sign-in failed]',err));
+      window.autoRetryPendingSalesSync?.({reason:'sign_in'}).catch(err=>console.warn('[Sales auto retry sign-in failed]',err));
       return result;
     };
   }
@@ -7577,9 +7647,14 @@ commit;`;
     window.onSupabaseStoreChange=async function(...args){
       const result=await _onSupabaseStoreChangeSales.apply(this,args);
       refreshSalesDiagnostics({silent:true}).catch(err=>console.warn('[Sales diagnostics store change failed]',err));
+      window.autoRetryPendingSalesSync?.({reason:'store_change',force:true}).catch(err=>console.warn('[Sales auto retry store change failed]',err));
       return result;
     };
   }
+
+  window.addEventListener('online',()=>{
+    window.autoRetryPendingSalesSync?.({reason:'online'}).catch(err=>console.warn('[Sales auto retry online failed]',err));
+  });
 
   renderSalesSupabaseUi();
 })();
