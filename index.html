@@ -8682,6 +8682,16 @@ commit;`;
       return result;
     };
   }
+  const _supabaseSignOutSales=window.supabaseSignOut;
+  if(typeof _supabaseSignOutSales==='function'){
+    window.supabaseSignOut=async function(...args){
+      const result=await _supabaseSignOutSales.apply(this,args);
+      refreshSalesDiagnostics({silent:true}).catch(err=>console.warn('[Sales diagnostics sign-out failed]',err));
+      window.ensureVisibleHistorySource?.().catch(err=>console.warn('[History fallback sign-out failed]',err));
+      window.ensureDashboardSource?.({forceRefresh:true}).catch(err=>console.warn('[Dashboard fallback sign-out failed]',err));
+      return result;
+    };
+  }
   const _onSupabaseStoreChangeSales=window.onSupabaseStoreChange;
   if(typeof _onSupabaseStoreChangeSales==='function'){
     window.onSupabaseStoreChange=async function(...args){
