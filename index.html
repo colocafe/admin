@@ -2208,32 +2208,100 @@ function renderDashboard(){
 //  HISTORIAL
 // ══════════════════════════════════════════════════
 function renderHistorial(){renderHistVentas();}
+function getLocalHistoryTicketsForUi(){
+  return getVentasByTicket(ventas||[]).map(group=>{
+    const pagos=getTicketPayments(group);
+    const totalPagos=money2(pagos.reduce((sum,p)=>sum+(Number(p.monto)||0),0));
+    return{
+      ticketId:group.ref?.ticket_id||group.ref?.id||'',
+      fecha:normalizeBusinessDate(group.ref?.fecha,group.ref?.timestamp),
+      hora:normalizeBusinessTime(group.ref?.hora,group.ref?.timestamp),
+      timestamp:group.ref?.timestamp||'',
+      operador:group.ref?.operador||'',
+      mesa:group.ref?.mesa||'',
+      tipo:group.ref?.tipo||'salon',
+      total:money2(group.total),
+      itemCount:(group.rows||[]).length,
+      paymentCount:pagos.length,
+      paymentTotal:totalPagos,
+      paymentMethods:pagos.map(p=>normalizePaymentMethod(p?.metodo)).filter(Boolean),
+      shiftId:(group.rows||[]).map(r=>r?._shift_sb_id||'').find(Boolean)||null,
+      reservationId:(group.rows||[]).map(r=>r?._reservation_sb_id||'').find(Boolean)||null,
+      source:'local',
+      items:(group.rows||[]).map(r=>({
+        producto:r.producto||'',
+        cantidad:Number(r.cantidad)||0,
+        variantes:r.variantes||'',
+        nota:r.nota||'',
+        total:money2(r.total)
+      })),
+      payments:pagos
+    };
+  }).sort((a,b)=>String(b.timestamp||`${b.fecha}T${b.hora||'00:00'}`).localeCompare(String(a.timestamp||`${a.fecha}T${a.hora||'00:00'}`)));
+}
 function renderHistVentas(){
-  const byF={};ventas.forEach(v=>{if(!byF[v.fecha])byF[v.fecha]=[];byF[v.fecha].push(v);});
-  const entries=Object.entries(byF).sort((a,b)=>b[0].localeCompare(a[0]));
-  if(!entries.length){$('hist-list').innerHTML='<div class="empty">No hay ventas registradas</div>';return;}
-  $('hist-list').innerHTML=entries.map(([fecha,rows],i)=>{
-    const total=rows.reduce((s,v)=>s+v.total,0);
-    const pagosTxt=getPaymentSummaryText(getVentasPaymentTotals(rows));
-    const d=parseLocalDateSafe(fecha);
-    // Group by mesa/transaction for detail view — show individual sales with hora+operador
-    const ventasSorted=[...rows].sort((a,b)=>(a.hora||'').localeCompare(b.hora||''));
-    return `<div class="hist-item">
-      <div class="hist-hdr" onclick="toggleHist(${i})">
-        <div><div class="hist-fecha">${fmtShort(d)}</div><div class="hist-meta">${pagosTxt} · ${rows.length} ítems</div></div>
-        <div class="hist-right"><span class="hist-total">${fmt(total)}</span><span class="hist-arr" id="ha-${i}">▾</span></div>
-      </div>
-      <div class="hist-detail" id="hd-${i}">
-        ${ventasSorted.map(v=>`<div class="hist-row2">
-          <span><strong>${v.hora||''}</strong> ${v.producto} ×${v.cantidad}${v.operador?` · <em style="color:var(--ink3)">${v.operador}</em>`:''}</span>
-          <span>${fmt(v.total)}</span>
-        </div>`).join('')}
-        <div class="hist-row2" style="padding-top:6px;border-top:1px solid var(--border);margin-top:4px">
-          <span style="font-weight:500">Total del día</span><span style="font-weight:500">${fmt(total)}</span>
+  const histState=window.getVisibleHistoryState?.()||null;
+  const useSupabase=histState?.source==='supabase';
+  const isFallback=histState?.source==='local_fallback';
+  const loading=!!histState?.loading;
+  const error=histState?.error||'';
+  const fallbackTickets=getLocalHistoryTicketsForUi();
+  const tickets=useSupabase
+    ? (histState?.tickets||[])
+    : ((histState?.tickets&&histState.tickets.length)?histState.tickets:fallbackTickets);
+  const sourceLabel=useSupabase?'Supabase':(isFallback?'Historial en modo local/fallback':'Local');
+  if(activeTab==='historial' && window.ensureVisibleHistorySource) setTimeout(()=>window.ensureVisibleHistorySource(),0);
+  if(loading){
+    $('hist-list').innerHTML=`<div class="empty">Cargando historial desde Supabase…</div>`;
+    return;
+  }
+  if(useSupabase && !tickets.length){
+    $('hist-list').innerHTML=`<div class="empty">No hay ventas en Supabase para esta tienda.</div>`;
+    return;
+  }
+  if(!tickets.length){
+    $('hist-list').innerHTML='<div class="empty">No hay ventas registradas</div>';
+    return;
+  }
+  $('hist-list').innerHTML=`
+    <div class="hist-item" style="margin-bottom:10px">
+      <div class="hist-hdr" style="cursor:default">
+        <div>
+          <div class="hist-fecha">Fuente: ${sourceLabel}</div>
+          <div class="hist-meta">${tickets.length} tickets · total ${fmt(tickets.reduce((sum,t)=>sum+money2(t.total),0))}${error?` · ${error}`:''}</div>
         </div>
       </div>
-    </div>`;
-  }).join('');
+    </div>
+    ${tickets.map((t,i)=>{
+      const pagosTxt=(Array.isArray(t.payments)&&t.payments.length)
+        ? t.payments.map(p=>`${getPaymentMethodMeta(p.metodo||p.method).short} ${fmt(p.monto||0)}`).join(' · ')
+        : 'Sin pagos';
+      const d=parseLocalDateSafe(t.fecha||t.timestamp||today());
+      const showTechSource=localStorage.getItem('sales_technical_mode')==='1';
+      return `<div class="hist-item">
+        <div class="hist-hdr" onclick="toggleHist(${i})">
+          <div>
+            <div class="hist-fecha">${fmtShort(d)}${t.hora?` · ${t.hora}`:''}</div>
+            <div class="hist-meta">${tipoLabel(t.tipo||'salon')}${t.mesa?` · ${t.mesa}`:''}${t.operador?` · ${t.operador}`:''}${t.source&&showTechSource?` · ${t.source}`:''}</div>
+            <div class="hist-meta">${pagosTxt} · ${t.itemCount||((t.items||[]).length)} ítems</div>
+          </div>
+          <div class="hist-right"><span class="hist-total">${fmt(t.total||0)}</span><span class="hist-arr" id="ha-${i}">▾</span></div>
+        </div>
+        <div class="hist-detail" id="hd-${i}">
+          ${(t.items||[]).map(item=>`<div class="hist-row2">
+            <span><strong>${item.producto||''}</strong> ×${item.cantidad||0}${item.variantes?` · ${item.variantes}`:''}${item.nota?` · <em style="color:var(--ink3)">${item.nota}</em>`:''}</span>
+            <span>${fmt(item.total||0)}</span>
+          </div>`).join('')}
+          <div class="hist-row2" style="padding-top:6px;border-top:1px solid var(--border);margin-top:4px">
+            <span style="font-weight:500">Pagos</span><span style="font-weight:500">${pagosTxt}</span>
+          </div>
+          <div class="hist-row2" style="padding-top:6px">
+            <span style="font-weight:500">Total ticket</span><span style="font-weight:500">${fmt(t.total||0)}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
 }
 function toggleHist(i){const d=$('hd-'+i),a=$('ha-'+i);const open=d.classList.toggle('open');a.classList.toggle('open',open);}
 
@@ -6472,6 +6540,14 @@ if(config.webappUrl){loadFromSheets();}
   let historyPreviewLastReadAt='';
   let historyPreviewLastError='';
   let historyPreviewResult=null;
+  let historyVisibleSource='local_fallback';
+  let historyVisibleTickets=[];
+  let historyVisibleItemsCount=0;
+  let historyVisiblePaymentsCount=0;
+  let historyVisibleTotal=0;
+  let historyVisibleLastReadAt='';
+  let historyVisibleLastError='';
+  let historyVisibleLoading=false;
   let salesAutoSyncRunning=false;
   let salesAutoSyncLastRunAt=0;
   const SALES_AUTO_SYNC_COOLDOWN_MS=30000;
@@ -6531,6 +6607,33 @@ if(config.webappUrl){loadFromSheets();}
     if(salesWriteState==='error') return `Fuente ventas: fallback local · ${salesLastError||'Error Supabase'}`;
     return 'Fuente ventas: Local + Supabase write-through';
   }
+  function getHistorySourceLabel(){
+    if(historyVisibleSource==='supabase') return 'Supabase';
+    if(historyVisibleSource==='local_fallback') return 'Local fallback';
+    return 'Local';
+  }
+  function setVisibleHistoryState({source='local_fallback',tickets=[],itemsCount=0,paymentsCount=0,total=0,lastReadAt='',error='',loading=false}={}){
+    historyVisibleSource=source;
+    historyVisibleTickets=Array.isArray(tickets)?tickets:[];
+    historyVisibleItemsCount=Number(itemsCount)||0;
+    historyVisiblePaymentsCount=Number(paymentsCount)||0;
+    historyVisibleTotal=money2(total);
+    historyVisibleLastReadAt=lastReadAt||historyVisibleLastReadAt||'';
+    historyVisibleLastError=error||'';
+    historyVisibleLoading=!!loading;
+  }
+  window.getVisibleHistoryState=function(){
+    return{
+      source:historyVisibleSource,
+      tickets:[...historyVisibleTickets],
+      itemsCount:historyVisibleItemsCount,
+      paymentsCount:historyVisiblePaymentsCount,
+      total:historyVisibleTotal,
+      lastReadAt:historyVisibleLastReadAt,
+      error:historyVisibleLastError,
+      loading:historyVisibleLoading
+    };
+  };
   function ensureSalesSupabaseUi(){
     const body=$('acc-body-menu');
     if(!body||body.querySelector('[data-sales-sb-tools="true"]')) return;
@@ -6576,6 +6679,8 @@ if(config.webappUrl){loadFromSheets();}
           <div><strong>Comparación preview:</strong> local ${localGroups.length} tickets / ${fmt(localTotal)} · Supabase ${salesPreviewCounts.sales} tickets / ${fmt(salesPreviewCounts.total||0)}</div>
           <div><strong>Diferencia preview:</strong> ${preview?`${preview.missingLocalInSupabase.length} local no encontrados · ${preview.missingSupabaseInLocal.length} Supabase no encontrados · ${preview.totalDiffTickets.length} tickets con diferencia`: '—'}</div>
           <div><strong>Preview historial Supabase:</strong> ${historyPreviewResult?.tickets?.length||0} tickets · ${historyPreviewResult?.sourceCounts?.items||0} items · ${historyPreviewResult?.sourceCounts?.payments||0} payments · total ${fmt(historyPreviewResult?.totals?.supabase||0)}</div>
+          <div><strong>Fuente historial actual:</strong> ${getHistorySourceLabel()}</div>
+          <div><strong>Historial cargado:</strong> ${historyVisibleTickets.length} tickets · ${historyVisibleItemsCount} items · ${historyVisiblePaymentsCount} payments · total ${fmt(historyVisibleTotal||0)}</div>
           <div><strong>Comparación historial:</strong> ${historyPreview?`${historyPreview.missingLocalInSupabase.length} local-only · ${historyPreview.missingSupabaseInLocal.length} remote-only · ${historyPreview.totalDiffTickets.length} con diferencia total · ${historyPreview.paymentDiffTickets.length} con diferencia pagos`: '—'}</div>
           <div><strong>Última sync ventas:</strong> ${salesLastSyncAt||'—'}</div>
           <div><strong>Último ticket sincronizado:</strong> ${salesLastTicket||'—'}</div>
@@ -6586,6 +6691,8 @@ if(config.webappUrl){loadFromSheets();}
           <div><strong>Preparación migración Excel:</strong> Antes de importar el histórico, dejá identificadas y limpias o marcadas todas las ventas de prueba/manual_test/debug.</div>
           <div><strong>Última lectura historial preview:</strong> ${historyPreviewLastReadAt||'—'}</div>
           <div><strong>Último error historial preview:</strong> ${historyPreviewLastError||'—'}</div>
+          <div><strong>Última lectura historial visible:</strong> ${historyVisibleLastReadAt||'—'}</div>
+          <div><strong>Último error historial visible:</strong> ${historyVisibleLastError||'—'}</div>
         `;
       }
       const techBox=$('sales-tech-box');
@@ -6610,6 +6717,7 @@ if(config.webappUrl){loadFromSheets();}
           <button class="btn ghost" type="button" onclick="loadSalesFromSupabasePreview()">Leer ventas Supabase preview</button>
           <button class="btn ghost" type="button" onclick="compareLocalSalesVsSupabase()">Comparar ventas local vs Supabase</button>
           <button class="btn ghost" type="button" onclick="debugSalesReadSupabase()">Debug lectura ventas</button>
+          <button class="btn ghost" type="button" onclick="reloadVisibleHistoryFromSupabase({forceRefresh:true})">Recargar historial desde Supabase</button>
           <button class="btn ghost" type="button" onclick="buildHistoryPreviewFromSupabase()">Leer preview historial Supabase</button>
           <button class="btn ghost" type="button" onclick="compareLocalHistoryVsSupabaseHistory()">Comparar historial local vs Supabase</button>
           <button class="btn ghost" type="button" onclick="debugHistorySupabasePreview()">Debug historial Supabase</button>
@@ -7014,10 +7122,20 @@ if(config.webappUrl){loadFromSheets();}
         paymentMethods:getComparablePaymentMethods(pagos),
         shiftId:(group.rows||[]).map(r=>r?._shift_sb_id||'').find(Boolean)||null,
         reservationId:(group.rows||[]).map(r=>r?._reservation_sb_id||'').find(Boolean)||null,
-        products:(group.rows||[]).map(r=>`${r.producto||''} x${Number(r.cantidad)||0}`)
+        source:'local',
+        items:(group.rows||[]).map(r=>({
+          producto:r.producto||'',
+          cantidad:Number(r.cantidad)||0,
+          variantes:r.variantes||'',
+          nota:r.nota||'',
+          total:money2(r.total)
+        })),
+        products:(group.rows||[]).map(r=>`${r.producto||''} x${Number(r.cantidad)||0}`),
+        payments:pagos
       };
     });
   }
+  window.getLocalHistoryTickets=getLocalHistoryTickets;
   window.mapSupabaseSaleToHistoryTicket=function(sale,items,payments){
     const comparablePayments=(payments||[]).map(p=>({metodo:normalizePaymentMethod(p.method),monto:money2(p.amount)}));
     return{
@@ -7035,6 +7153,14 @@ if(config.webappUrl){loadFromSheets();}
       paymentMethods:getComparablePaymentMethods(comparablePayments),
       shiftId:sale.shift_id||null,
       reservationId:sale.reservation_id||null,
+      source:sale.legacy_source||sale.metadata?.source||'supabase',
+      items:(items||[]).map(item=>({
+        producto:item.product_name||'',
+        cantidad:Number(item.quantity)||0,
+        variantes:item.variant_summary||'',
+        nota:item.note||'',
+        total:money2(item.line_total)
+      })),
       products:(items||[]).map(item=>`${item.product_name||''} x${Number(item.quantity)||0}`),
       payments:comparablePayments
     };
@@ -7084,6 +7210,85 @@ if(config.webappUrl){loadFromSheets();}
       showToast(`Preview historial falló: ${historyPreviewLastError}`);
       return null;
     }
+  };
+  window.reloadVisibleHistoryFromSupabase=async function({silent=false,forceRefresh=true}={}){
+    if(historyVisibleLoading) return null;
+    if(!hasSalesSupabaseReady()){
+      setVisibleHistoryState({
+        source:'local_fallback',
+        tickets:getLocalHistoryTickets(),
+        itemsCount:(ventas||[]).length,
+        paymentsCount:groupLocalSaleRowsByTicket(ventas||[]).reduce((sum,g)=>sum+getTicketPayments(g).length,0),
+        total:money2(getLocalHistoryTickets().reduce((sum,t)=>sum+money2(t.total),0)),
+        lastReadAt:historyVisibleLastReadAt||'',
+        error:'Historial en modo local/fallback',
+        loading:false
+      });
+      if(activeTab==='historial') renderHistVentas();
+      renderSalesSupabaseUi();
+      return null;
+    }
+    historyVisibleLoading=true;
+    renderSalesSupabaseUi();
+    try{
+      const preview=await buildHistoryPreviewFromSupabase({allDates:true,limit:false,forceRefresh,...(forceRefresh?{}:{})});
+      if(!preview){
+        throw new Error(historyPreviewLastError||'No se pudo leer historial Supabase');
+      }
+      setVisibleHistoryState({
+        source:'supabase',
+        tickets:preview.tickets||[],
+        itemsCount:preview.sourceCounts?.items||0,
+        paymentsCount:preview.sourceCounts?.payments||0,
+        total:preview.totals?.supabase||0,
+        lastReadAt:historyPreviewLastReadAt||stampSalesMoment(),
+        error:'',
+        loading:false
+      });
+      if(activeTab==='historial') renderHistVentas();
+      renderSalesSupabaseUi();
+      if(!silent) showToast(`Historial Supabase cargado: ${(preview.tickets||[]).length} tickets`);
+      return preview;
+    }catch(err){
+      const localTickets=getLocalHistoryTickets();
+      setVisibleHistoryState({
+        source:'local_fallback',
+        tickets:localTickets,
+        itemsCount:(ventas||[]).length,
+        paymentsCount:groupLocalSaleRowsByTicket(ventas||[]).reduce((sum,g)=>sum+getTicketPayments(g).length,0),
+        total:money2(localTickets.reduce((sum,t)=>sum+money2(t.total),0)),
+        lastReadAt:stampSalesMoment(),
+        error:err?.message||String(err)||'Historial en modo local/fallback',
+        loading:false
+      });
+      if(activeTab==='historial') renderHistVentas();
+      renderSalesSupabaseUi();
+      if(!silent) showToast(`Historial en modo local/fallback: ${err?.message||String(err)}`);
+      return null;
+    }finally{
+      historyVisibleLoading=false;
+      renderSalesSupabaseUi();
+    }
+  };
+  window.ensureVisibleHistorySource=async function(){
+    if(historyVisibleLoading) return;
+    if(hasSalesSupabaseReady()){
+      if(historyVisibleSource!=='supabase' || !historyVisibleTickets.length){
+        await reloadVisibleHistoryFromSupabase({silent:true,forceRefresh:true});
+      }
+      return;
+    }
+    const localTickets=getLocalHistoryTickets();
+    setVisibleHistoryState({
+      source:'local_fallback',
+      tickets:localTickets,
+      itemsCount:(ventas||[]).length,
+      paymentsCount:groupLocalSaleRowsByTicket(ventas||[]).reduce((sum,g)=>sum+getTicketPayments(g).length,0),
+      total:money2(localTickets.reduce((sum,t)=>sum+money2(t.total),0)),
+      lastReadAt:historyVisibleLastReadAt||'',
+      error:'Historial en modo local/fallback',
+      loading:false
+    });
   };
   async function resolveSaleProductId(row,client,storeId,cache){
     cache=cache||{};
@@ -7314,6 +7519,9 @@ if(config.webappUrl){loadFromSheets();}
       salesLastSyncAt=stampSalesMoment();
       setSalesWriteState('ready');
       await refreshSalesDiagnostics({silent:true});
+      if(window.reloadVisibleHistoryFromSupabase){
+        setTimeout(()=>window.reloadVisibleHistoryFromSupabase({silent:true,forceRefresh:true}),0);
+      }
       console.groupEnd();
       return{ok:true,saleId,legacyId:saleData.legacy_id||salesLastTicket};
     }catch(err){
