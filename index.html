@@ -2722,7 +2722,7 @@ if(config.webappUrl){loadFromSheets();}
           </label>
           <label>
             <div>Anon key</div>
-            <input id="cfg-sb-anon-adj" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="eyJ...">
+            <input id="cfg-sb-anon-adj" type="password" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="eyJ...">
           </label>
         </div>
         <div class="row">
@@ -2800,7 +2800,7 @@ if(config.webappUrl){loadFromSheets();}
           </label>
           <label>
             <div>Anon key</div>
-            <input id="cfg-sb-anon-modal" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="eyJ...">
+            <input id="cfg-sb-anon-modal" type="password" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="eyJ...">
           </label>
         </div>
         <div class="row">
@@ -2863,6 +2863,21 @@ if(config.webappUrl){loadFromSheets();}
     if(document.getElementById('sb-modal')) return;
     document.body.appendChild(buildSupabaseModal());
   }
+  function getSupabaseTechnicalModeEnabled(){
+    return localStorage.getItem('technical_mode')==='1' || localStorage.getItem('sales_technical_mode')==='1';
+  }
+  function getSupabaseActiveRole(){
+    const activeStoreId=(config&&config.activeStoreId)||'';
+    const stores=Array.isArray(supabaseStores)?supabaseStores:[];
+    if(activeStoreId){
+      const found=stores.find(s=>String(s?.id||'')===String(activeStoreId));
+      if(found?.role) return found.role;
+    }
+    return stores[0]?.role||'';
+  }
+  function canShowSupabaseTechnicalUi(){
+    return ['owner','admin'].includes((getSupabaseActiveRole()||'').toLowerCase()) && getSupabaseTechnicalModeEnabled();
+  }
 
   function syncSupabaseFieldValue(id, value){
     const el=document.getElementById(id);
@@ -2895,13 +2910,17 @@ if(config.webappUrl){loadFromSheets();}
   }
 
   function ensureSupabaseAccordion(){
-    const accordions=[...document.querySelectorAll('.accordion')];
-    const gsAcc=accordions.find(acc => (acc.textContent||'').includes('Conexión Google Sheets'));
     const ajustesView=document.getElementById('v-ajustes');
-    const targetParent=gsAcc?.parentNode || ajustesView || document.body;
-    if(!targetParent) return;
-    if(document.getElementById('acc-supabase') && document.getElementById('acc-supabase')?.parentNode===targetParent) return;
     const existing=document.getElementById('acc-supabase');
+    if(!ajustesView || !canShowSupabaseTechnicalUi()){
+      if(existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      return;
+    }
+    const accordions=[...ajustesView.querySelectorAll('.accordion')];
+    const gsAcc=accordions.find(acc => (acc.textContent||'').includes('Conexión Google Sheets'));
+    const targetParent=gsAcc?.parentNode || ajustesView;
+    if(!targetParent) return;
+    if(existing && existing.parentNode===targetParent) return;
     if(existing && existing.parentNode) existing.parentNode.removeChild(existing);
     const panel=buildSupabaseAccordion();
     if(gsAcc && gsAcc.nextSibling) targetParent.insertBefore(panel, gsAcc.nextSibling);
@@ -2911,7 +2930,11 @@ if(config.webappUrl){loadFromSheets();}
   function renderSupabaseStatus(){
     ensureSupabaseHeaderPill();
     ensureSupabaseAccordion();
-    ensureSupabaseModal();
+    if(canShowSupabaseTechnicalUi()) ensureSupabaseModal();
+    else{
+      const hiddenModal=document.getElementById('sb-modal');
+      if(hiddenModal) hiddenModal.style.display='none';
+    }
     const configured=hasSupabaseConfig(), loggedIn=!!supabaseUser;
     const pill=document.getElementById('sb-pill');
     const dot=document.getElementById('sb-dot');
@@ -3054,6 +3077,10 @@ if(config.webappUrl){loadFromSheets();}
 
   window.openSupabaseSettings=function(){
     if(window.goTab) goTab('ajustes');
+    if(!canShowSupabaseTechnicalUi()){
+      if(window.showToast) showToast('Configuración técnica disponible sólo para owner/admin en modo técnico');
+      return;
+    }
     ensureSupabaseModal();
     renderSupabaseStatus();
     const modal=document.getElementById('sb-modal');
@@ -3201,7 +3228,7 @@ if(config.webappUrl){loadFromSheets();}
       ensureSupabaseConfigShape();
       ensureSupabaseHeaderPill();
       ensureSupabaseAccordion();
-      ensureSupabaseModal();
+      if(canShowSupabaseTechnicalUi()) ensureSupabaseModal();
       renderSupabaseStatus();
       if(hasSupabaseConfig()){
         try{
@@ -6556,6 +6583,7 @@ if(config.webappUrl){loadFromSheets();}
           <div><strong>Última lectura:</strong> ${salesLastProbeAt||'—'}</div>
           <div><strong>Última lectura preview:</strong> ${salesPreviewLastReadAt||'—'}</div>
           <div><strong>Último error preview:</strong> ${salesPreviewLastError||'—'}</div>
+          <div><strong>Preparación migración Excel:</strong> Antes de importar el histórico, dejá identificadas y limpias o marcadas todas las ventas de prueba/manual_test/debug.</div>
           <div><strong>Última lectura historial preview:</strong> ${historyPreviewLastReadAt||'—'}</div>
           <div><strong>Último error historial preview:</strong> ${historyPreviewLastError||'—'}</div>
         `;
@@ -6575,6 +6603,8 @@ if(config.webappUrl){loadFromSheets();}
           <button class="btn ghost" type="button" onclick="retryLastSaleSync()">Reintentar sync última venta local</button>
           <button class="btn ghost" type="button" onclick="retryPendingSalesSync()">Reintentar sync ventas pendientes</button>
           <button class="btn ghost" type="button" onclick="debugPendingSalesSync()">Debug ventas pendientes</button>
+          <button class="btn ghost" type="button" onclick="listCandidateTestSales()">Listar ventas candidatas a prueba</button>
+          <button class="btn ghost" type="button" onclick="generateCleanupSqlForSaleLegacyIds()">Generar SQL limpieza ventas prueba</button>
           <button class="btn ghost" type="button" onclick="markLastSaleAsManualTest()">Marcar última venta como prueba</button>
           <button class="btn ghost" type="button" onclick="listRecentLocalSaleTickets()">Mostrar últimos tickets locales</button>
           <button class="btn ghost" type="button" onclick="loadSalesFromSupabasePreview()">Leer ventas Supabase preview</button>
@@ -7583,6 +7613,191 @@ where legacy_id in (${quoted});
 commit;`;
     console.group('[Sales manual test cleanup SQL]');
     console.log('ticket_ids', uniqueIds);
+    console.log(sql);
+    console.groupEnd();
+    return sql;
+  };
+  function getLocalManualTestTicketIds(){
+    return [...new Set(groupLocalSaleRowsByTicket(ventas||[])
+      .filter(group=>(group.rows||[]).some(r=>!!r?._sb_manual_test))
+      .map(group=>getStableSaleLegacyId(group))
+      .filter(Boolean))];
+  }
+  function isCandidateTestSaleRow(sale,localManualIds){
+    const metadata=sale?.metadata||{};
+    return !!(
+      String(sale?.legacy_id||'').startsWith('debug') ||
+      String(sale?.legacy_id||'').startsWith('test') ||
+      String(sale?.legacy_source||'')==='debug' ||
+      String(metadata?.source||'')==='debug' ||
+      metadata?.debug===true ||
+      metadata?.manual_test===true ||
+      String(metadata?.manual_test||'')==='true' ||
+      String(sale?.operator_name||'')==='Debug' ||
+      localManualIds.includes(String(sale?.legacy_id||''))
+    );
+  }
+  async function getSalesItemPaymentCounts(saleIds){
+    const client=getSalesSupabaseClient();
+    const storeId=getSalesStoreId();
+    const counts={items:{},payments:{}};
+    if(!Array.isArray(saleIds)||!saleIds.length||!client||!storeId) return counts;
+    const [{data:itemRows,error:itemErr},{data:paymentRows,error:paymentErr}] = await Promise.all([
+      client.from('sale_items').select('sale_id').eq('store_id',storeId).in('sale_id',saleIds),
+      client.from('sale_payments').select('sale_id').eq('store_id',storeId).in('sale_id',saleIds)
+    ]);
+    if(itemErr) throw itemErr;
+    if(paymentErr) throw paymentErr;
+    (itemRows||[]).forEach(r=>{counts.items[r.sale_id]=(counts.items[r.sale_id]||0)+1;});
+    (paymentRows||[]).forEach(r=>{counts.payments[r.sale_id]=(counts.payments[r.sale_id]||0)+1;});
+    return counts;
+  }
+  window.markSaleAsManualTestByLegacyId=async function(legacyId){
+    const key=String(legacyId||'').trim();
+    if(!key){showToast('Indicá un legacy_id válido');return null;}
+    const client=getSalesSupabaseClient();
+    const storeId=getSalesStoreId();
+    if(!hasSalesSupabaseReady()||!client){showToast('Configurá Supabase y una store activa primero');return null;}
+    try{
+      const session=await getSalesSession(client);
+      if(!session) throw new Error('No hay sesión activa');
+      if(!storeId || !isValidUuid(storeId)) throw new Error('Store ID inválido');
+      const saleRes=await client.from('sales').select('id,legacy_id,metadata').eq('store_id',storeId).eq('legacy_id',key).maybeSingle();
+      if(saleRes.error) throw saleRes.error;
+      if(!saleRes.data) throw new Error(`No encontré sales.legacy_id = ${key}`);
+      const saleMeta={...(saleRes.data.metadata||{}),source:'manual_test',manual_test:true};
+      const saleUpdate=await client.from('sales').update({metadata:saleMeta}).eq('id',saleRes.data.id).eq('store_id',storeId).select('id,legacy_id').single();
+      if(saleUpdate.error) throw saleUpdate.error;
+      const [itemsRes,paymentsRes]=await Promise.all([
+        client.from('sale_items').select('id,metadata').eq('store_id',storeId).eq('sale_id',saleRes.data.id),
+        client.from('sale_payments').select('id,metadata').eq('store_id',storeId).eq('sale_id',saleRes.data.id)
+      ]);
+      if(itemsRes.error) throw itemsRes.error;
+      if(paymentsRes.error) throw paymentsRes.error;
+      for(const item of (itemsRes.data||[])){
+        const itemMeta={...(item.metadata||{}),source:'manual_test',manual_test:true};
+        const itemUpdate=await client.from('sale_items').update({metadata:itemMeta}).eq('id',item.id).eq('store_id',storeId);
+        if(itemUpdate.error) throw itemUpdate.error;
+      }
+      for(const payment of (paymentsRes.data||[])){
+        const paymentMeta={...(payment.metadata||{}),source:'manual_test',manual_test:true};
+        const paymentUpdate=await client.from('sale_payments').update({metadata:paymentMeta}).eq('id',payment.id).eq('store_id',storeId);
+        if(paymentUpdate.error) throw paymentUpdate.error;
+      }
+      ventas=(ventas||[]).map(v=>String(v.ticket_id||getSaleFallbackKey(v))===key?{...v,_sb_manual_test:true}:v);
+      save();
+      showToast(`Venta ${key} marcada como manual_test`);
+      return saleUpdate.data;
+    }catch(err){
+      console.error('[Sales mark manual_test by legacy_id failed]',{
+        legacyId:key,
+        message:err?.message||String(err),
+        code:err?.code||'',
+        details:err?.details||'',
+        hint:err?.hint||''
+      });
+      showToast(`No pude marcar ${key}: ${err?.message||String(err)}`);
+      return null;
+    }
+  };
+  window.listCandidateTestSales=async function(limit=200){
+    const client=getSalesSupabaseClient();
+    const storeId=getSalesStoreId();
+    if(!hasSalesSupabaseReady()||!client){showToast('Configurá Supabase y una store activa primero');return [];}
+    try{
+      const session=await getSalesSession(client);
+      if(!session) throw new Error('No hay sesión activa');
+      if(!storeId || !isValidUuid(storeId)) throw new Error('Store ID inválido');
+      const {data:salesRows,error:salesErr}=await client
+        .from('sales')
+        .select('id,legacy_id,legacy_source,business_date,sold_at,operator_name,table_label,total_amount,metadata')
+        .eq('store_id',storeId)
+        .order('sold_at',{ascending:false})
+        .limit(Number(limit)||200);
+      if(salesErr) throw salesErr;
+      const localManualIds=getLocalManualTestTicketIds();
+      const candidates=(salesRows||[]).filter(sale=>isCandidateTestSaleRow(sale,localManualIds));
+      const counts=await getSalesItemPaymentCounts(candidates.map(s=>s.id));
+      const rows=candidates.map(sale=>({
+        id:sale.id,
+        legacy_id:sale.legacy_id||'',
+        legacy_source:sale.legacy_source||'',
+        business_date:sale.business_date||'',
+        sold_at:sale.sold_at||'',
+        operator_name:sale.operator_name||'',
+        table_label:sale.table_label||'',
+        total_amount:money2(sale.total_amount),
+        metadata:sale.metadata||{},
+        item_count:counts.items[sale.id]||0,
+        payment_count:counts.payments[sale.id]||0
+      }));
+      console.group('[Sales candidate test rows]');
+      console.table(rows);
+      console.groupEnd();
+      showToast(`Ventas candidatas a prueba: ${rows.length}`);
+      return rows;
+    }catch(err){
+      console.error('[Sales list candidate test rows failed]',{
+        message:err?.message||String(err),
+        code:err?.code||'',
+        details:err?.details||'',
+        hint:err?.hint||''
+      });
+      showToast(`No pude listar ventas candidatas: ${err?.message||String(err)}`);
+      return [];
+    }
+  };
+  window.generateCleanupSqlForSaleLegacyIds=function(legacyIds){
+    const ids=Array.isArray(legacyIds)?legacyIds.map(v=>String(v||'').trim()).filter(Boolean):[];
+    if(!ids.length){
+      const localMarked=getLocalManualTestTicketIds();
+      ids.push(...localMarked);
+    }
+    const uniqueIds=[...new Set(ids)];
+    if(!uniqueIds.length){
+      const msg='No hay legacy_id explícitos para generar SQL de limpieza.';
+      console.warn('[Sales cleanup SQL by legacy_id]',msg);
+      return msg;
+    }
+    const quoted=uniqueIds.map(id=>`'${id.replace(/'/g,"''")}'`).join(', ');
+    const sql=`-- Preview
+select 'sale_payments' as table_name, count(*) as rows_to_delete
+from public.sale_payments
+where sale_id in (
+  select id from public.sales where legacy_id in (${quoted})
+)
+union all
+select 'sale_items' as table_name, count(*) as rows_to_delete
+from public.sale_items
+where sale_id in (
+  select id from public.sales where legacy_id in (${quoted})
+)
+union all
+select 'sales' as table_name, count(*) as rows_to_delete
+from public.sales
+where legacy_id in (${quoted});
+
+-- Cleanup
+begin;
+
+delete from public.sale_payments
+where sale_id in (
+  select id from public.sales
+  where legacy_id in (${quoted})
+);
+
+delete from public.sale_items
+where sale_id in (
+  select id from public.sales
+  where legacy_id in (${quoted})
+);
+
+delete from public.sales
+where legacy_id in (${quoted});
+
+commit;`;
+    console.group('[Sales cleanup SQL by legacy_id]');
+    console.log('legacy_ids', uniqueIds);
     console.log(sql);
     console.groupEnd();
     return sql;
