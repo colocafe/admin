@@ -515,7 +515,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .brand-panel-kicker{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
 .brand-panel-title{font-family:var(--ff-serif);font-size:22px;line-height:1.1;color:var(--ink)}
 .brand-panel-text{font-size:13px;line-height:1.5;color:var(--ink2);max-width:560px}
-.brand-panel-badge{display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border-radius:999px;background:var(--surf);border:1px solid var(--border);font-size:11px;color:var(--ink2);white-space:nowrap}
+.brand-panel-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ink2);white-space:nowrap}
 .brand-panel-badge img{height:14px;max-width:72px;width:auto;object-fit:contain;display:block}
 .tech-only-note{display:none}
 .settings-note{font-size:12px;color:var(--ink2);line-height:1.55;background:rgba(246,239,228,.88);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:12px}
@@ -523,7 +523,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .page-footer{padding:10px 18px calc(var(--nav-h) + 18px);text-align:center}
 .page-footer-inner{max-width:1200px;margin:0 auto;font-size:12px;color:var(--ink3);line-height:1.5;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
 .page-footer-label{color:var(--ink3)}
-.page-footer-brand{display:inline-flex;align-items:center;gap:8px;min-height:24px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.72);border:1px solid rgba(28,21,1,.06)}
+.page-footer-brand{display:inline-flex;align-items:center;gap:6px;min-height:24px}
 .page-footer-logo{height:18px;max-width:96px;width:auto;opacity:.9;vertical-align:middle;object-fit:contain}
 .page-footer-brand-text{color:var(--ink2);font-weight:600}
 @media(max-width:767px){
@@ -777,9 +777,10 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
     </div>
     <div class="settings-note" id="ajustes-settings-note">
       <strong>Operación.</strong> Revisá tu cuenta, la tienda activa y el estado general de la operación.
-      <br>
-      <span id="ajustes-settings-note-tech">Las herramientas avanzadas quedan reservadas para administración en modo técnico.</span>
     </div>
+
+    <!-- Sección modo técnico: solo visible para owner/admin -->
+    <div id="tech-mode-section" style="display:none"></div>
 
     <!-- ACCORDION: Menú -->
     <div class="accordion-item" id="acc-menu">
@@ -814,8 +815,8 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
       </div>
     </div>
 
-    <!-- ACCORDION: Sheets -->
-    <div class="accordion-item" id="acc-sheets">
+    <!-- ACCORDION: Sheets (solo modo técnico) -->
+    <div class="accordion-item" id="acc-sheets" style="display:none">
       <div class="accordion-hdr" onclick="toggleAccordion('sheets')">
         <div>
           <div class="accordion-titulo">Compatibilidad Google Sheets</div>
@@ -2516,8 +2517,7 @@ function renderAjustes(){
   const am=$('acc-menu-meta');if(am)am.textContent=`${menu.length} productos · ${cats.length} categorías`;
   const canTech=window.canShowClientTechnicalUi?.()||false;
   const accSheets=$('acc-sheets'); if(accSheets) accSheets.style.display=canTech?'block':'none';
-  const accDatos=$('acc-datos'); if(accDatos) accDatos.style.display=canTech?'block':'none';
-  const techNote=$('ajustes-settings-note-tech'); if(techNote) techNote.style.display=canTech?'inline':'none';
+  // acc-datos (Datos locales) siempre visible — no tiene datos técnicos peligrosos
   const gsLegacyNote=$('gs-legacy-note'); if(gsLegacyNote) gsLegacyNote.style.display=canTech?'block':'none';
 }
 function renderCatMgr(){
@@ -2951,23 +2951,17 @@ if(config.webappUrl){loadFromSheets();}
           <div class="auth-subtitle">Ingresá con tu cuenta para operar con ventas, historial, dashboard y turnos sincronizados.</div>
           <div class="cfg-status" id="sb-auth-status">Sistema sincronizado con Supabase.</div>
           <div id="sb-auth-loggedout">
-            <div class="auth-row">
-              <label>
-                <div>Nombre</div>
-                <input id="sb-auth-name" placeholder="Nombre visible">
-              </label>
-              <label>
-                <div>Email</div>
-                <input id="sb-auth-email" type="email" placeholder="nombre@correo.com">
-              </label>
-            </div>
+            <input id="sb-auth-name" type="hidden" value="">
+            <label>
+              <div>Email</div>
+              <input id="sb-auth-email" type="email" placeholder="nombre@correo.com">
+            </label>
             <label>
               <div>Contraseña</div>
               <input id="sb-auth-password" type="password" placeholder="Mínimo 6 caracteres">
             </label>
             <div class="row">
               <button class="btn alt" onclick="supabaseSignIn()">Iniciar sesión</button>
-              <button class="btn ghost" onclick="supabaseSignUp()">Crear usuario</button>
             </div>
           </div>
           <div id="sb-auth-loggedin" style="display:none">
@@ -3040,23 +3034,17 @@ if(config.webappUrl){loadFromSheets();}
           <div class="auth-subtitle">Si la conexión ya está configurada, ingresá con tu email y contraseña.</div>
           <div class="cfg-status" id="sb-auth-status-modal">Sistema sincronizado con Supabase.</div>
           <div id="sb-auth-loggedout-modal">
-            <div class="auth-row">
-              <label>
-                <div>Nombre</div>
-                <input id="sb-auth-name-modal" placeholder="Nombre visible">
-              </label>
-              <label>
-                <div>Email</div>
-                <input id="sb-auth-email-modal" type="email" placeholder="nombre@correo.com">
-              </label>
-            </div>
+            <input id="sb-auth-name-modal" type="hidden" value="">
+            <label>
+              <div>Email</div>
+              <input id="sb-auth-email-modal" type="email" placeholder="nombre@correo.com">
+            </label>
             <label>
               <div>Contraseña</div>
               <input id="sb-auth-password-modal" type="password" placeholder="Mínimo 6 caracteres">
             </label>
             <div class="row">
               <button class="btn alt" onclick="supabaseSignIn()">Iniciar sesión</button>
-              <button class="btn ghost" onclick="supabaseSignUp()">Crear usuario</button>
             </div>
           </div>
           <div id="sb-auth-loggedin-modal" style="display:none">
@@ -3088,7 +3076,10 @@ if(config.webappUrl){loadFromSheets();}
     document.body.appendChild(buildSupabaseModal());
   }
   function getSupabaseTechnicalModeEnabled(){
-    return localStorage.getItem('technical_mode')==='1' || localStorage.getItem('sales_technical_mode')==='1';
+    // Limpiar valores legacy de localStorage en cada check
+    localStorage.removeItem('technical_mode');
+    localStorage.removeItem('sales_technical_mode');
+    return sessionStorage.getItem('technical_mode')==='1' || sessionStorage.getItem('sales_technical_mode')==='1';
   }
   function getSupabaseActiveRole(){
     const activeStoreId=(config&&config.activeStoreId)||'';
@@ -3209,12 +3200,13 @@ if(config.webappUrl){loadFromSheets();}
     syncSupabaseText('sb-user-name-modal', displayName);
     syncSupabaseText('sb-user-email-modal', email);
 
+    const isAdmin=['owner','admin'].includes((getSupabaseActiveRole()||'').toLowerCase());
     for(const selectId of ['sb-store-sel','sb-store-sel-modal']){
       const storeSel=document.getElementById(selectId);
       if(storeSel){
         const currentStoreId=config.activeStoreId||'';
         storeSel.innerHTML=`<option value="">${supabaseStores.length?'Seleccioná…':'Sin stores asignadas'}</option>`+
-          supabaseStores.map(s=>`<option value="${s.id}"${s.id===currentStoreId?' selected':''}>${s.name}${s.role?` · ${s.role}`:''}</option>`).join('');
+          supabaseStores.map(s=>`<option value="${s.id}"${s.id===currentStoreId?' selected':''}>${s.name}${canTech && s.role?` · ${s.role}`:''}</option>`).join('');
       }
     }
     const activeStore=supabaseStores.find(s=>s.id===config.activeStoreId);
@@ -3223,10 +3215,24 @@ if(config.webappUrl){loadFromSheets();}
       if(storeChip){
         if(activeStore){
           storeChip.style.display='inline-flex';
-          storeChip.textContent=`Store: ${activeStore.name}${activeStore.role?` · ${activeStore.role}`:''}`;
+          storeChip.textContent=`${activeStore.name}${canTech && activeStore.role?` · ${activeStore.role}`:''}`;
         }else{
           storeChip.style.display='none';
         }
+      }
+    }
+    // Google Sheets: solo visible en modo técnico
+    const sheetsAcc=document.getElementById('acc-sheets');
+    if(sheetsAcc) sheetsAcc.style.display=canTech?'':'none';
+    // Botón modo técnico: visible para owner/admin logueados
+    const techSection=document.getElementById('tech-mode-section');
+    if(techSection){
+      if(loggedIn && isAdmin){
+        techSection.style.display='';
+        techSection.innerHTML=`<div style="margin-bottom:12px"><button class="btn ghost" type="button" style="font-size:12px;color:var(--ink3);border-color:var(--border)" onclick="toggleSalesTechnicalMode()">${canTech?'⚙️ Desactivar modo técnico':'⚙️ Activar modo técnico'}</button>${canTech?' <span style="font-size:11px;color:var(--orange);font-weight:500">Modo técnico activo</span>':''}</div>`;
+      }else{
+        techSection.style.display='none';
+        techSection.innerHTML='';
       }
     }
   }
@@ -7045,11 +7051,12 @@ if(config.webappUrl){loadFromSheets();}
     return ['owner','admin'].includes((getSalesRole()||'').toLowerCase());
   }
   function isSalesTechnicalModeEnabled(){
-    return localStorage.getItem('sales_technical_mode')==='1';
+    return sessionStorage.getItem('sales_technical_mode')==='1';
   }
   window.toggleSalesTechnicalMode=function(force){
     const next=typeof force==='boolean'?force:!isSalesTechnicalModeEnabled();
-    localStorage.setItem('sales_technical_mode',next?'1':'0');
+    sessionStorage.setItem('sales_technical_mode',next?'1':'0');
+    try{if(window.renderAjustes) renderAjustes();}catch(_){}
     renderSalesSupabaseUi();
   };
   function hasSalesSupabaseReady(){
