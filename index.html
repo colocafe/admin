@@ -27,35 +27,51 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --bg:#FDF6EE; --surf:#FFFFFF; --surf2:#F5EDE0; --surf3:#EDE3D4;
-  --ink:#1C1501; --ink2:#6B5F4A; --ink3:#B0A590;
-  --orange:#C94A1A; --orange-bg:#FEF0EA; --orange-mid:#E8703A;
-  --green:#1A7A4A; --green-bg:#EAF7F0;
-  --red:#B03030; --red-bg:#FDEAEA;
-  --amber:#8A5A00; --amber-bg:#FFF5DC;
-  --blue:#185FA5; --blue-bg:#EAF0FA;
+  --bg:#FCF7F1; --surf:#FFFFFF; --surf2:#F6EFE4; --surf3:#EEE2D1;
+  --ink:#20160B; --ink2:#6E5A46; --ink3:#A99680;
+  --orange:#B94C1E; --orange-bg:#FBE8DE; --orange-mid:#DA6D3E;
+  --green:#1B7A4A; --green-bg:#EAF7F0;
+  --red:#B43737; --red-bg:#FDECEC;
+  --amber:#926100; --amber-bg:#FFF4D6;
+  --blue:#235E9D; --blue-bg:#EAF0FA;
   --border:rgba(28,21,1,.09); --border2:rgba(28,21,1,.16);
+  --shadow-sm:0 8px 22px rgba(74,44,18,.07);
+  --shadow-md:0 16px 40px rgba(74,44,18,.10);
+  --focus:0 0 0 3px rgba(185,76,30,.16);
   --r:14px; --r-sm:8px; --r-xs:6px;
   --ff-serif:'Fraunces',Georgia,serif; --ff:'DM Sans',sans-serif;
   --nav-h:60px; --header-h:58px;
 }
-body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;min-height:100vh}
+body{font-family:var(--ff);background:
+  radial-gradient(circle at top left, rgba(185,76,30,.10), transparent 26%),
+  radial-gradient(circle at top right, rgba(35,94,157,.08), transparent 22%),
+  linear-gradient(180deg,#fdf8f2 0%, var(--bg) 18%, #f8f1e7 100%);
+  color:var(--ink);font-size:14px;min-height:100vh}
+
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.chip:focus-visible,.pago-opt:focus-visible,.sb-pill:focus-visible,.turno-pill:focus-visible,.nav-btn:focus-visible{
+  outline:none;box-shadow:var(--focus)
+}
 
 /* ── HEADER ── */
-.header{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--header-h);background:var(--surf);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 16px;gap:12px}
+.header{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--header-h);background:rgba(255,250,244,.88);backdrop-filter:blur(14px);border-bottom:1px solid rgba(28,21,1,.08);display:flex;align-items:center;justify-content:space-between;padding:0 16px;gap:12px;box-shadow:0 6px 24px rgba(76,51,24,.05)}
 .header-left{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .logo-svg{flex-shrink:0}
+.brand-lockup{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-mark{width:44px;height:44px;flex-shrink:0;filter:drop-shadow(0 10px 18px rgba(76,51,24,.10))}
+.brand-copy{display:flex;flex-direction:column;min-width:0}
+.brand-kicker{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.brand-name{font-family:var(--ff-serif);font-size:18px;line-height:1;color:var(--ink);white-space:nowrap}
 .header-right{display:flex;align-items:center;gap:8px;min-width:0}
 .header-date{font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gs-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border);background:var(--surf2);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:default}
+.gs-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border);background:rgba(246,239,228,.92);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:default;box-shadow:var(--shadow-sm)}
 .gs-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);transition:background .3s;flex-shrink:0}
 .gs-dot.on{background:var(--green)}
-.sb-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border);background:var(--surf2);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:pointer;transition:background .15s}
+.sb-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border);background:rgba(246,239,228,.92);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:pointer;transition:background .15s;box-shadow:var(--shadow-sm)}
 .sb-pill:hover{background:var(--surf3)}
 .sb-pill.on{background:var(--blue-bg);border-color:rgba(24,95,165,.18);color:var(--blue)}
 .sb-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);transition:background .3s;flex-shrink:0}
 .sb-dot.on{background:var(--blue)}
-.turno-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border);background:var(--surf2);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:pointer;transition:background .15s}
+.turno-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border);background:rgba(246,239,228,.92);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:pointer;transition:background .15s;box-shadow:var(--shadow-sm)}
 .turno-pill:hover{background:var(--surf3)}
 .turno-pill.abierto{background:var(--green-bg);border-color:rgba(26,122,74,.2);color:var(--green)}
 
@@ -92,6 +108,8 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
   .carga-right{display:block}
   .inv-layout,.dash-layout,.hist-layout,.adj-layout{padding:12px}
   .dash-grid{display:block}
+  .brand-kicker{display:none}
+  .brand-name{font-size:16px}
 }
 
 /* ── SECTION UTILS ── */
@@ -106,7 +124,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 
 /* ── PRODUCT GRID ── */
 .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:8px;margin-bottom:14px}
-.prod-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px;cursor:pointer;transition:all .12s;position:relative;user-select:none}
+.prod-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px;cursor:pointer;transition:all .12s;position:relative;user-select:none;box-shadow:var(--shadow-sm)}
 .prod-card:active{transform:scale(.96)}
 .prod-card.in-cart{border-color:var(--orange);border-width:1.5px}
 .prod-card.disabled{opacity:.38;pointer-events:none}
@@ -120,7 +138,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .out-lbl{position:absolute;top:8px;right:8px;background:var(--red-bg);color:var(--red);border-radius:4px;padding:2px 5px;font-size:9px;font-weight:500}
 
 /* ── CARRITO ── */
-.carrito-wrap{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:16px}
+.carrito-wrap{background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:var(--r);padding:16px;box-shadow:var(--shadow-md)}
 @media(max-width:767px){.carrito-wrap{margin-bottom:14px}}
 .cart-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .cart-title{font-size:14px;font-weight:500}
@@ -147,7 +165,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .pago-mixed-row span{flex:1;font-size:12px;color:var(--ink2)}
 .pago-mixed-row input{width:110px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r-sm);background:#fff;color:var(--ink);font-size:12px}
 .pago-mixed-status{font-size:11px;line-height:1.4;margin-top:8px;color:var(--ink3)}
-.btn-confirmar{width:100%;padding:12px;background:var(--orange);color:#fff;border:none;border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;font-weight:500;cursor:pointer;transition:all .15s}
+.btn-confirmar{width:100%;padding:12px;background:linear-gradient(180deg,var(--orange-mid),var(--orange));color:#fff;border:none;border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;box-shadow:0 10px 22px rgba(185,76,30,.18)}
 .btn-confirmar:active{transform:scale(.98);opacity:.9}
 .btn-confirmar:disabled{opacity:.35;cursor:default}
 
@@ -166,7 +184,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .kpi-up{color:var(--green)}.kpi-dn{color:var(--red)}
 
 /* ── CHART CARD ── */
-.chart-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.chart-card{background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
 .chart-ttl{font-size:13px;font-weight:500;margin-bottom:14px}
 .bar-chart{display:flex;align-items:flex-end;gap:5px;height:90px;margin-bottom:4px}
 .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end}
@@ -260,7 +278,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .merma-cant{font-size:13px;color:var(--red);font-weight:500;flex-shrink:0}
 
 /* ── AJUSTES ── */
-.cfg-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.cfg-card{background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm)}
 .cfg-title{font-size:13px;font-weight:500;margin-bottom:12px}
 .cfg-field{margin-bottom:12px}
 .cfg-lbl{font-size:11px;color:var(--ink3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em;display:block}
@@ -268,13 +286,14 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .cfg-input:focus{border-color:var(--orange)}
 .cfg-help{font-size:11px;color:var(--ink3);line-height:1.45;margin-top:6px}
 .cfg-status{font-size:12px;color:var(--ink2);line-height:1.45;margin-bottom:10px}
-.auth-card{background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin-top:12px}
+.auth-card{background:linear-gradient(180deg,rgba(246,239,228,.95),rgba(255,255,255,.96));border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin-top:12px;box-shadow:var(--shadow-sm)}
 .auth-title{font-size:12px;font-weight:500;color:var(--ink);margin-bottom:10px}
+.auth-subtitle{font-size:11px;color:var(--ink3);margin-top:-6px;margin-bottom:10px}
 .auth-row{display:flex;gap:8px;flex-wrap:wrap}
 .auth-row .btn-sm,.auth-row .btn-cfg{flex:1}
 .auth-user-meta{font-size:12px;color:var(--ink2);line-height:1.5;margin-bottom:10px}
 .auth-store-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:var(--surf);border:1px solid var(--border);font-size:11px;color:var(--ink2);margin-top:6px}
-.btn-cfg{width:100%;padding:10px;background:var(--orange);color:#fff;border:none;border-radius:var(--r-sm);font-family:var(--ff);font-size:13px;font-weight:500;cursor:pointer}
+.btn-cfg{width:100%;padding:10px;background:linear-gradient(180deg,var(--orange-mid),var(--orange));color:#fff;border:none;border-radius:var(--r-sm);font-family:var(--ff);font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 10px 22px rgba(185,76,30,.18)}
 .cat-mgr{display:flex;flex-direction:column;gap:6px}
 .cat-mgr-row{background:var(--surf);border:1px solid var(--border);border-radius:var(--r-sm);display:flex;align-items:center;padding:10px 12px;gap:10px}
 .cat-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;cursor:pointer;border:1px solid rgba(0,0,0,.1)}
@@ -358,7 +377,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 /* ── MODAL (generic) ── */
 .modal-ov{display:none;position:fixed;inset:0;background:rgba(28,21,1,.5);z-index:500;align-items:center;justify-content:center;padding:16px}
 .modal-ov.open{display:flex}
-.modal-box{background:var(--surf);border-radius:var(--r);width:100%;max-width:480px;padding:24px;animation:popIn .2s ease;max-height:90vh;overflow-y:auto}
+.modal-box{background:rgba(255,252,248,.98);border-radius:var(--r);width:100%;max-width:480px;padding:24px;animation:popIn .2s ease;max-height:90vh;overflow-y:auto;box-shadow:0 28px 60px rgba(32,22,11,.22);border:1px solid rgba(32,22,11,.08)}
 @keyframes popIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
 .modal-title{font-family:var(--ff-serif);font-size:18px;margin-bottom:18px}
 .modal-field{margin-bottom:14px}
@@ -390,7 +409,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .nota-input:focus{border-color:var(--blue)}
 
 /* ── TOAST ── */
-.toast{position:fixed;bottom:calc(var(--nav-h) + 12px);left:50%;transform:translateX(-50%) translateY(10px);background:var(--ink);color:var(--bg);padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;opacity:0;transition:all .25s;pointer-events:none;z-index:600;white-space:nowrap}
+.toast{position:fixed;bottom:calc(var(--nav-h) + 12px);left:50%;transform:translateX(-50%) translateY(10px);background:rgba(32,22,11,.96);color:#fff8f1;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;z-index:600;white-space:nowrap;box-shadow:0 16px 36px rgba(32,22,11,.28)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ── MISC ── */
@@ -402,7 +421,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .guide-txt code{background:var(--surf2);padding:1px 5px;border-radius:4px;font-size:11px;color:var(--ink)}
 
 /* ── ACCORDION ── */
-.accordion-item{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px;overflow:hidden}
+.accordion-item{background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden;box-shadow:var(--shadow-sm)}
 .accordion-hdr{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;user-select:none;transition:background .12s}
 .accordion-hdr:hover{background:var(--surf2)}
 .accordion-titulo{font-size:13px;font-weight:500;color:var(--ink)}
@@ -471,6 +490,22 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);font-size:14px;
 .ventas-section-title::after{content:'';flex:1;height:1px;background:var(--border)}
 .reserva-items{font-size:11px;color:var(--ink3);margin-top:3px}
 .reserva-total{font-size:13px;font-weight:500;color:var(--orange);margin-top:3px}
+.brand-panel{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;background:linear-gradient(135deg,rgba(255,255,255,.95),rgba(246,239,228,.92));border:1px solid var(--border);border-radius:18px;padding:18px 20px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.brand-panel-copy{display:flex;flex-direction:column;gap:6px}
+.brand-panel-kicker{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.brand-panel-title{font-family:var(--ff-serif);font-size:22px;line-height:1.1;color:var(--ink)}
+.brand-panel-text{font-size:13px;line-height:1.5;color:var(--ink2);max-width:560px}
+.brand-panel-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:999px;background:var(--surf);border:1px solid var(--border);font-size:11px;color:var(--ink2);white-space:nowrap}
+.settings-note{font-size:12px;color:var(--ink2);line-height:1.55;background:rgba(246,239,228,.88);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.settings-note strong{color:var(--ink)}
+.page-footer{padding:10px 18px calc(var(--nav-h) + 18px);text-align:center}
+.page-footer-inner{max-width:1200px;margin:0 auto;font-size:12px;color:var(--ink3);line-height:1.5}
+.page-footer-inner strong{color:var(--ink2);font-weight:600}
+@media(max-width:767px){
+  .brand-panel{padding:16px}
+  .brand-panel-title{font-size:18px}
+  .brand-panel{flex-direction:column;align-items:flex-start}
+}
 /* ── STOCK EN PRODUCTO ── */
 .stock-toggle-row{display:flex;align-items:center;gap:10px;padding:8px 0}
 .toggle-switch{position:relative;width:36px;height:20px;flex-shrink:0}
@@ -536,7 +571,13 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 <!-- HEADER -->
 <div class="header">
   <div class="header-left">
-    <img src="logo.svg" style="width:44px;height:44px;flex-shrink:0;" alt="Colo Café">
+    <div class="brand-lockup">
+      <img src="logo.svg" class="brand-mark" alt="Colo Café">
+      <div class="brand-copy">
+        <span class="brand-kicker">Centro de operación</span>
+        <span class="brand-name">Colo Café</span>
+      </div>
+    </div>
   </div>
   <div class="header-right">
     <span class="header-date" id="hoy-lbl"></span>
@@ -696,6 +737,19 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 <!-- TAB: AJUSTES -->
 <div class="tab" id="tab-ajustes">
   <div class="adj-layout">
+    <div class="brand-panel">
+      <div class="brand-panel-copy">
+        <div class="brand-panel-kicker">Configuración</div>
+        <div class="brand-panel-title">Colo Café · operación diaria</div>
+        <div class="brand-panel-text">Usá esta sección para revisar conexiones, datos locales y herramientas administrativas. Las opciones técnicas quedan reservadas para administración en modo técnico.</div>
+      </div>
+      <div class="brand-panel-badge">Soporte y evolución · Growi</div>
+    </div>
+    <div class="settings-note">
+      <strong>Operación.</strong> El equipo de caja y salón sólo necesita ver el estado general de conexión y sincronización.
+      <br>
+      <strong>Herramientas técnicas.</strong> La configuración avanzada y los diagnósticos quedan ocultos para operadores normales.
+    </div>
 
     <!-- ACCORDION: Menú -->
     <div class="accordion-item" id="acc-menu">
@@ -775,6 +829,10 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 </div>
 
 </div><!-- end page-wrap -->
+
+<footer class="page-footer">
+  <div class="page-footer-inner">Solución desarrollada por <strong>Growi</strong></div>
+</footer>
 
 
 <!-- BOTTOM NAV -->
@@ -1601,7 +1659,7 @@ function renderSetupBanner(){
   $('gs-dot').classList.toggle('on',c);$('gs-txt').textContent=c?'Conectado':'Sin conexión';
   const d2=$('gs-dot2');if(d2)d2.classList.toggle('on',c);
   const sb=$('setup-banner');if(sb)sb.innerHTML=c?'':
-    `<div class="setup-banner" onclick="goTab('ajustes');setTimeout(()=>toggleAccordion('sheets'),200)">⚡ Conectá Google Sheets — ir a Ajustes</div>`;
+    `<div class="setup-banner" onclick="goTab('ajustes');setTimeout(()=>toggleAccordion('sheets'),200)">⚡ Falta conectar Google Sheets. Revisalo en Ajustes.</div>`;
   const am=$('acc-sheets-meta');if(am)am.textContent=c?'Conectado':'Sin configurar';
 }
 function guardarConfigAdj(){
@@ -2153,7 +2211,7 @@ function renderDashboard(){
   const va=useSupabase||useFallback?[]:ventas.filter(v=>v.fecha===getLocalDateString(ayer));
   const totalAyer=va.reduce((s,v)=>s+v.total,0);
   const difPct=totalAyer>0?Math.round((totalV-totalAyer)/totalAyer*100):null;
-  const dashboardSourceLabel=useSupabase?'Supabase':useFallback?'Dashboard en modo local/fallback':showLoading?'Cargando dashboard desde Supabase…':'Local';
+  const dashboardSourceLabel=useSupabase?'Supabase':useFallback?'Modo sin conexión (datos locales)':showLoading?'Cargando dashboard desde Supabase…':'Local';
   const dashboardMsg=useSupabase&&txP===0&&!dashboardState?.error?'No hay ventas en Supabase para este rango.':(dashboardState?.error||'');
   const dashStatus=$('dash-source-status');
   if(dashStatus){
@@ -2269,7 +2327,7 @@ function renderHistVentas(){
   const tickets=useSupabase
     ? (histState?.tickets||[])
     : ((histState?.tickets&&histState.tickets.length)?histState.tickets:fallbackTickets);
-  const sourceLabel=useSupabase?'Supabase':(isFallback?'Historial en modo local/fallback':'Local');
+  const sourceLabel=useSupabase?'Supabase':(isFallback?'Modo sin conexión (historial local)':'Local');
   if(activeTab==='historial' && window.ensureVisibleHistorySource) setTimeout(()=>window.ensureVisibleHistorySource(),0);
   if(loading){
     $('hist-list').innerHTML=`<div class="empty">Cargando historial desde Supabase…</div>`;
@@ -2826,6 +2884,7 @@ if(config.webappUrl){loadFromSheets();}
         </div>
         <div class="auth-card">
           <div class="auth-title">Acceso</div>
+          <div class="auth-subtitle">Ingresá con tu cuenta para operar con ventas, historial, dashboard y turnos sincronizados.</div>
           <div class="cfg-status" id="sb-auth-status">Configurá el Project URL y la anon key para habilitar login.</div>
           <div id="sb-auth-loggedout">
             <div class="auth-row">
@@ -2877,9 +2936,12 @@ if(config.webappUrl){loadFromSheets();}
     overlay.innerHTML=`
       <div style="width:min(680px,96vw);max-height:90vh;overflow:auto;background:#fffaf4;border:1px solid #e6d7c2;border-radius:24px;box-shadow:0 24px 60px rgba(79,49,18,.18);padding:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;">
-          <div>
-            <div style="font-size:20px;font-weight:800;color:#4c3318">Supabase y acceso</div>
-            <div style="font-size:13px;color:#a38763">Configura conexión, crea usuario o iniciá sesión.</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <img src="logo.svg" alt="Colo Café" style="width:42px;height:42px;flex-shrink:0;filter:drop-shadow(0 8px 16px rgba(76,51,24,.10))">
+            <div>
+              <div style="font-size:20px;font-weight:800;color:#4c3318">Colo Café · acceso</div>
+              <div style="font-size:13px;color:#a38763">Iniciá sesión para trabajar con el sistema sincronizado.</div>
+            </div>
           </div>
           <button class="btn ghost" onclick="closeSupabaseModal()">Cerrar</button>
         </div>
@@ -2906,6 +2968,7 @@ if(config.webappUrl){loadFromSheets();}
         </div>
         <div class="auth-card" style="margin-top:12px">
           <div class="auth-title">Acceso</div>
+          <div class="auth-subtitle">Si la conexión ya está configurada, ingresá con tu email y contraseña.</div>
           <div class="cfg-status" id="sb-auth-status-modal">Configurá el Project URL y la anon key para habilitar login.</div>
           <div id="sb-auth-loggedout-modal">
             <div class="auth-row">
@@ -3054,8 +3117,8 @@ if(config.webappUrl){loadFromSheets();}
         ? 'Configurá el Project URL y la anon key para habilitar login.'
         : 'Supabase no está configurado. Contactá al administrador.')
       : (loggedIn
-        ? 'Conectado con Supabase. La persistencia principal sigue siendo local/Sheets en esta fase.'
-        : 'Supabase configurado. Podés crear usuario o iniciar sesión.');
+        ? 'Conectado con Supabase. Podés seguir operando con datos sincronizados.'
+        : 'Supabase ya está listo. Ingresá con tu cuenta para empezar.');
     setSupabaseStatus(statusMessage);
     syncSupabaseText('sb-auth-status-modal', statusMessage);
 
@@ -6906,18 +6969,18 @@ if(config.webappUrl){loadFromSheets();}
     renderSalesSupabaseUi();
   }
   function getSalesSourceLabel(){
-    if(salesWriteState==='syncing') return 'Fuente ventas: sincronizando write-through…';
-    if(salesWriteState==='error') return `Fuente ventas: fallback local · ${salesLastError||'Error Supabase'}`;
-    return 'Fuente ventas: Local + Supabase write-through';
+    if(salesWriteState==='syncing') return 'Ventas sincronizando en segundo plano…';
+    if(salesWriteState==='error') return `Ventas en modo local · ${salesLastError||'Error de sincronización'}`;
+    return 'Ventas conectadas con Supabase';
   }
   function getHistorySourceLabel(){
     if(historyVisibleSource==='supabase') return 'Supabase';
-    if(historyVisibleSource==='local_fallback') return 'Local fallback';
+    if(historyVisibleSource==='local_fallback') return 'Modo local';
     return 'Local';
   }
   function getDashboardSourceLabel(){
     if(dashboardVisibleSource==='supabase') return 'Supabase';
-    if(dashboardVisibleSource==='local_fallback') return 'Local fallback';
+    if(dashboardVisibleSource==='local_fallback') return 'Modo local';
     if(dashboardVisibleSource==='pending') return 'Cargando…';
     return 'Local';
   }
