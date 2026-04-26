@@ -9473,15 +9473,9 @@ commit;`;
     applyTheme(current==='dark'?'light':'dark',true);
   };
 
-  // Inicializar: preferencia guardada → sistema → light
+  // Inicializar: preferencia guardada → light por defecto
   const saved=localStorage.getItem(STORAGE_KEY);
-  const systemDark=window.matchMedia?.('(prefers-color-scheme:dark)').matches;
-  applyTheme(saved||(systemDark?'dark':'light'),false);
-
-  // Seguir cambios del sistema si el usuario no eligió manualmente
-  window.matchMedia?.('(prefers-color-scheme:dark)').addEventListener('change',e=>{
-    if(!localStorage.getItem(STORAGE_KEY)) applyTheme(e.matches?'dark':'light',true);
-  });
+  applyTheme(saved||'light',false);
 })();
 // ──────────────────────────────────────────────────────────────────────────
 </script>
