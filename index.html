@@ -3278,6 +3278,22 @@ if(config.webappUrl){loadFromSheets();}
 (()=>{
   let supabaseClient=null,supabaseSession=null,supabaseUser=null,supabaseProfile=null,supabaseStores=[],supabaseAuthSub=null,supabaseAuthSig='';
 
+  // ── Configuración por defecto (pública — anon key, NUNCA service_role) ──────
+  const DEFAULT_SUPABASE_URL='https://xhtpahjsddfkwsytubgu.supabase.co';
+  const DEFAULT_SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhodHBhaGpzZGRma3dzeXR1Ymd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTAxNDgsImV4cCI6MjA5MjU2NjE0OH0.g1I35u3_CiYGFr4Qs1IBqhobEgTIdkgtf0wzmZGf-NM';
+
+  // Prioridad: override técnico en localStorage → defaults embebidos en el código
+  function getSupabaseRuntimeConfig(){
+    const lsUrl=(localStorage.getItem('supabase_url')||'').trim();
+    const lsKey=(localStorage.getItem('supabase_anon_key')||'').trim();
+    return {
+      url: lsUrl||DEFAULT_SUPABASE_URL,
+      key: lsKey||DEFAULT_SUPABASE_ANON_KEY,
+      isOverride: !!(lsUrl&&lsKey)
+    };
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   function saveConfig(){ localStorage.setItem('config', JSON.stringify(config||{})); }
   function getSupabaseLib(){ return window.supabase||null; }
   function hasSupabaseConfig(){ return !!(config&&config.supabaseUrl&&config.supabaseAnonKey); }
@@ -3298,7 +3314,16 @@ if(config.webappUrl){loadFromSheets();}
   }
   window.getSupabaseClient=getSupabaseClient;
   function setSupabaseStatus(msg){ const el=document.getElementById('sb-auth-status'); if(el) el.textContent=msg; }
-  function ensureSupabaseConfigShape(){ if(!window.config) window.config={}; config={ activeStoreId:'', ...config }; }
+  function ensureSupabaseConfigShape(){
+    if(!window.config) window.config={};
+    config={ activeStoreId:'', ...config };
+    // Inyectar defaults si no hay URL/key (dispositivo nuevo sin localStorage)
+    if(!config.supabaseUrl||!config.supabaseAnonKey){
+      const rt=getSupabaseRuntimeConfig();
+      if(!config.supabaseUrl) config.supabaseUrl=rt.url;
+      if(!config.supabaseAnonKey) config.supabaseAnonKey=rt.key;
+    }
+  }
 
   function ensureSupabaseHeaderPill(){
     const gsPill=document.getElementById('gs-pill');
@@ -3306,7 +3331,7 @@ if(config.webappUrl){loadFromSheets();}
     const pill=document.createElement('div');
     pill.className='sb-pill';
     pill.id='sb-pill';
-    pill.innerHTML='<div class="sb-dot" id="sb-dot"></div><span id="sb-txt">Supabase</span>';
+    pill.innerHTML='<div class="sb-dot" id="sb-dot"></div><span id="sb-txt">Iniciar sesión</span>';
     pill.onclick=()=>window.openSupabaseSettings();
     gsPill.parentNode.insertBefore(pill, gsPill);
   }
@@ -3336,9 +3361,9 @@ if(config.webappUrl){loadFromSheets();}
           <button class="btn ghost" onclick="pasteSupabaseField('url')">Pegar URL</button>
           <button class="btn ghost" onclick="pasteSupabaseField('anon')">Pegar anon key</button>
         </div>
-        <div class="cfg-help">Sistema sincronizado con Supabase.</div>
+        <div class="cfg-help">Override técnico opcional. La app ya trae conexión predeterminada — solo modificá esto si necesitás apuntar a otro proyecto.</div>
         <div class="row">
-          <button class="btn alt" onclick="guardarSupabaseConfigAdj()">Guardar Supabase</button>
+          <button class="btn alt" onclick="guardarSupabaseConfigAdj()">Guardar override</button>
           <button class="btn ghost" onclick="reconectarSupabase()">Reconectar</button>
         </div>
         </div>
@@ -3417,9 +3442,9 @@ if(config.webappUrl){loadFromSheets();}
                 <button class="btn ghost" onclick="pasteSupabaseField('url')">Pegar URL</button>
                 <button class="btn ghost" onclick="pasteSupabaseField('anon')">Pegar anon key</button>
               </div>
-              <div class="cfg-help">Sistema sincronizado con Supabase.</div>
+              <div class="cfg-help">Override técnico opcional. La app ya trae conexión predeterminada — solo modificá esto si necesitás apuntar a otro proyecto.</div>
               <div class="row">
-                <button class="btn alt" onclick="guardarSupabaseConfigAdj()">Guardar Supabase</button>
+                <button class="btn alt" onclick="guardarSupabaseConfigAdj()">Guardar override</button>
                 <button class="btn ghost" onclick="reconectarSupabase()">Reconectar</button>
               </div>
             </div>
@@ -3527,7 +3552,7 @@ if(config.webappUrl){loadFromSheets();}
   function ensureSupabaseAccordion(){
     const ajustesView=document.getElementById('v-ajustes');
     const existing=document.getElementById('acc-supabase');
-    const canAccessPanel=!!ajustesView && (hasSupabaseConfig() || !!supabaseUser || canShowSupabaseTechnicalUi());
+    const canAccessPanel=!!ajustesView;
     if(!ajustesView || !canAccessPanel){
       if(existing && existing.parentNode) existing.parentNode.removeChild(existing);
       return;
@@ -3551,17 +3576,15 @@ if(config.webappUrl){loadFromSheets();}
     ensureSupabaseAccordion();
     const configured=hasSupabaseConfig(), loggedIn=!!supabaseUser, canTech=canShowSupabaseTechnicalUi();
     const canTechLoggedIn=loggedIn && canTech;
-    if(configured || canTech) ensureSupabaseModal();
-    else{
-      const hiddenModal=document.getElementById('sb-modal');
-      if(hiddenModal) hiddenModal.style.display='none';
-    }
+    ensureSupabaseModal();
     const pill=document.getElementById('sb-pill');
     const dot=document.getElementById('sb-dot');
     const txt=document.getElementById('sb-txt');
     if(pill) pill.classList.toggle('on', loggedIn);
     if(dot) dot.classList.toggle('on', loggedIn);
-    if(txt) txt.textContent=!configured ? 'Supabase' : (loggedIn ? (supabaseProfile?.display_name||supabaseProfile?.full_name||supabaseUser?.email||'Conectado') : 'Ingresar');
+    if(txt) txt.textContent=loggedIn
+      ? (supabaseProfile?.display_name||supabaseProfile?.full_name||(supabaseUser?.email||'').split('@')[0]||'Sesión activa')
+      : 'Iniciar sesión';
     const meta=document.getElementById('acc-supabase-meta');
     if(meta) meta.textContent=!configured ? 'Sin configurar' : (loggedIn ? 'Sesión iniciada' : 'Listo para login');
 
@@ -3580,13 +3603,9 @@ if(config.webappUrl){loadFromSheets();}
     syncSupabaseDisplay('sb-auth-loggedout-modal', configured && !loggedIn ? 'block' : 'none');
     syncSupabaseDisplay('sb-auth-loggedin-modal', loggedIn ? 'block' : 'none');
 
-    const statusMessage=!configured
-      ? (canTech
-        ? (loggedIn?'Podés completar los ajustes técnicos desde este mismo modal.':'El acceso todavía no está configurado. Contactá al administrador.')
-        : 'El acceso todavía no está configurado. Contactá al administrador.')
-      : (loggedIn
-        ? 'Conectado con Supabase. Podés seguir operando con datos sincronizados.'
-        : 'Supabase ya está listo. Ingresá con tu cuenta para empezar.');
+    const statusMessage=loggedIn
+      ? 'Conectado. Podés seguir operando con datos sincronizados.'
+      : 'Ingresá con tu cuenta para empezar.';
     setSupabaseStatus(statusMessage);
     syncSupabaseText('sb-auth-status-modal', statusMessage);
 
@@ -3743,13 +3762,6 @@ if(config.webappUrl){loadFromSheets();}
   }
 
   window.openSupabaseSettings=function(){
-    const configured=hasSupabaseConfig();
-    const canTech=canShowSupabaseTechnicalUi();
-    if(!configured && !canTech){
-      if(window.showToast) showToast('Supabase no está configurado. Contactá al administrador.');
-      return;
-    }
-    if(canTech && window.goTab) goTab('ajustes');
     ensureSupabaseModal();
     renderSupabaseStatus();
     const modal=document.getElementById('sb-modal');
@@ -3807,7 +3819,7 @@ if(config.webappUrl){loadFromSheets();}
   };
 
   window.supabaseSignIn=async function(){
-    if(!supabaseClient){ if(window.showToast) showToast('Configurá Supabase primero'); return; }
+    if(!supabaseClient){ if(window.showToast) showToast('No se pudo inicializar el acceso. Revisá la conexión o contactá al administrador.'); return; }
     const {email,password}=getSupabaseAuthForm();
     if(!email || !password){ if(window.showToast) showToast('Ingresá email y contraseña'); return; }
     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
@@ -3900,7 +3912,7 @@ if(config.webappUrl){loadFromSheets();}
       ensureSupabaseConfigShape();
       ensureSupabaseHeaderPill();
       ensureSupabaseAccordion();
-      if(canShowSupabaseTechnicalUi()) ensureSupabaseModal();
+      ensureSupabaseModal();
       renderSupabaseStatus();
       if(hasSupabaseConfig()){
         try{
