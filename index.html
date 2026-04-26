@@ -75,7 +75,7 @@
 [data-theme="dark"] #sb-modal .auth-card{background:linear-gradient(180deg,rgba(44,28,14,.95),rgba(38,23,16,.96))!important}
 [data-theme="dark"] #sb-modal [style*="color:#4c3318"],[data-theme="dark"] #sb-modal [style*="color: #4c3318"]{color:var(--ink)!important}
 [data-theme="dark"] #sb-modal [style*="color:#a38763"],[data-theme="dark"] #sb-modal [style*="color: #a38763"]{color:var(--ink3)!important}
-[data-theme="dark"] .brand-mark{filter:brightness(1.55) drop-shadow(0 0 7px rgba(240,200,150,.22)) drop-shadow(0 8px 18px rgba(0,0,0,.50))}
+[data-theme="dark"] .brand-mark{filter:brightness(0) invert(1) drop-shadow(0 4px 12px rgba(0,0,0,.50))}
 [data-theme="dark"] .page-footer-logo,[data-theme="dark"] .brand-panel-badge img{filter:brightness(0) invert(1) opacity(.80)}
 /* Transición suave al cambiar tema */
 .theme-switching,.theme-switching *{transition:background-color .18s ease,border-color .18s ease,color .18s ease!important}
@@ -83,7 +83,7 @@
 /* ── TOGGLE ── */
 .theme-toggle{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;border:1px solid var(--border2);background:var(--surf2);cursor:pointer;font-size:15px;flex-shrink:0;padding:0;line-height:1;transition:background .15s}
 .theme-toggle:hover{background:var(--surf3)}
-@media(max-width:400px){#sb-pill #sb-txt{display:none}#sb-pill{padding:4px 7px}}
+@media(max-width:767px){#sb-pill #sb-txt{display:none}#sb-pill{padding:5px 8px}}
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 body{font-family:var(--ff);background:
@@ -106,6 +106,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .brand-name{font-family:var(--ff-serif);font-size:20px;line-height:1;color:var(--ink);white-space:nowrap}
 .header-right{display:flex;align-items:center;gap:8px;min-width:0}
 .header-date{font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.header-date-short{display:none}
 .gs-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border);background:rgba(246,239,228,.92);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:default;box-shadow:var(--shadow-sm)}
 .gs-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);transition:background .3s;flex-shrink:0}
 .gs-dot.on{background:var(--green)}
@@ -598,8 +599,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .page-footer-inner{gap:6px}
   .page-footer-logo{height:16px;max-width:84px}
   .header-right{gap:6px}
-  .header-date{min-width:54px;font-size:10px}
+  .header-date-full{display:none}
+  .header-date-short{display:inline;font-size:11px;flex-shrink:0}
   .theme-toggle{width:24px;height:24px;font-size:13px}
+  .brand-copy{display:none}
+  .brand-mark{width:40px;height:40px}
 }
 /* ── STOCK EN PRODUCTO ── */
 .stock-toggle-row{display:flex;align-items:center;gap:10px;padding:8px 0}
@@ -674,7 +678,8 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
     </div>
   </div>
   <div class="header-right">
-    <span class="header-date" id="hoy-lbl"></span>
+    <span class="header-date header-date-full" id="hoy-lbl"></span>
+    <span class="header-date header-date-short" id="hoy-lbl-short"></span>
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar entre modo claro y oscuro">🌙</button>
     <div class="turno-pill" id="turno-pill" onclick="openTurnoModal()">
       <span class="turno-dot" id="turno-dot"></span>Sin turno
@@ -1671,7 +1676,7 @@ function ejecutarConfirm(){
 }
 
 // ── Date ticker ──────────────────────────────────
-function updateDate(){$('hoy-lbl').textContent=fmtFull(new Date());}
+function updateDate(){const now=new Date();$('hoy-lbl').textContent=fmtFull(now);const s=$('hoy-lbl-short');if(s)s.textContent=fmtShort(now);}
 updateDate();setInterval(updateDate,30000);
 
 // ── Nav ──────────────────────────────────────────
