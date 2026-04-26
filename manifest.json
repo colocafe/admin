@@ -1,0 +1,17 @@
+{
+  "name": "Colo Café",
+  "short_name": "Colo Café",
+  "description": "Sistema de gestión — Colo Café",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#FCF7F1",
+  "theme_color": "#B94C1E",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
