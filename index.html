@@ -711,7 +711,6 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <div style="display:flex;gap:8px;flex-shrink:0">
           <button class="btn-sm" onclick="openGastoModal()">+ Gasto</button>
           <button class="btn-sm" onclick="openReservaModal(null)">+ Reserva</button>
-          <button class="btn-sm ghost" id="btn-actualizar-mesas" onclick="actualizarMesas()" title="Recargar mesas desde Supabase">↻</button>
           <button class="btn-sm primary" onclick="abrirNuevaMesa()">+ Mesa</button>
         </div>
       </div>
@@ -950,10 +949,10 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <button class="btn-sm" style="color:var(--red);border-color:rgba(176,48,48,.3)" onclick="pedirConfirm('¿Limpiar todo el historial local de ventas?',limpiarVentas,'Limpiar','var(--red)','🗑')">🗑 Limpiar ventas e historial</button>
         <!-- Diagnóstico mesas abiertas (solo modo técnico) -->
         <div id="oo-sb-box" style="display:none;margin-top:14px">
-          <div style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Mesas abiertas · Supabase</div>
+          <div style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Mesas abiertas · Supabase sync</div>
           <div id="oo-sb-diag" style="font-size:12px;color:var(--ink2);background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;line-height:1.7"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-            <button class="btn-sm ghost" onclick="window.loadOpenOrdersFromSupabase?.().then(r=>{window.renderMesasSection?.();window.updateOODiag?.();showToast(r?.ok?'Mesas recargadas':'Sin conexión')}).catch(()=>{})">Recargar desde Supabase</button>
+            <button class="btn-sm ghost" id="btn-actualizar-mesas-tech" onclick="actualizarMesas()">↻ Actualizar mesas</button>
           </div>
         </div>
       </div>
@@ -2224,17 +2223,16 @@ function renderVentas(){
   mesaActivaId=null;carrito={};
   renderStockAlerts();renderSetupBanner();
   renderVentasFiltroChips();renderMesasSection();renderReservasSection();
-  // Refresh mesas from Supabase in background (non-blocking)
-  if(window.loadOpenOrdersFromSupabase){
-    window.loadOpenOrdersFromSupabase().then(r=>{if(r?.ok){renderMesasSection();renderReservasSection();}}).catch(()=>{});
-  }
+  // Refresh silencioso en background — sin toast, sin bloquear UI
+  window.triggerOORefresh?.('tab');
 }
+// Refresh manual (solo modo técnico)
 async function actualizarMesas(){
-  const btn=$('btn-actualizar-mesas');if(btn){btn.disabled=true;btn.textContent='…';}
-  const r=await window.loadOpenOrdersFromSupabase?.();
+  const btn=document.getElementById('btn-actualizar-mesas-tech');
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  const r=await window.loadOpenOrdersFromSupabase?.({force:true,silent:false});
   renderMesasSection();renderReservasSection();
-  if(btn){btn.disabled=false;btn.textContent='↻';}
-  showToast(r?.ok?`Mesas actualizadas (${r.count??0} abiertas)`:'Sin conexión Supabase — mesas locales');
+  if(btn){btn.disabled=false;btn.textContent='↻ Actualizar mesas';}
 }
 function renderVentasFiltroChips(){
   const el=$('ventas-filtro-chips');if(!el)return;
@@ -2302,6 +2300,8 @@ function confirmarNuevaMesa(){
   const m={id:'m_'+Date.now(),nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null};
   mesas.push(m);save();syncMesasSheets();cerrarModalNuevaMesa();
   window.syncMesaToSupabase?.(m).catch(()=>{});
+  // Post-creación: forzar refresh rápido para sincronizar con otros dispositivos
+  setTimeout(()=>window.triggerOORefresh?.('post_action'),1500);
   abrirMesa(m.id);
 }
 document.addEventListener('DOMContentLoaded',()=>{
@@ -3815,9 +3815,9 @@ if(config.webappUrl){loadFromSheets();}
       renderSupabaseStatus();
       await loadOperatorsFromSupabase();
       renderOperadoresSection();
-      // Cargar mesas abiertas desde Supabase al iniciar sesión
+      // Cargar mesas abiertas desde Supabase al iniciar sesión (forzado, ignora cooldown)
       setTimeout(()=>{
-        window.loadOpenOrdersFromSupabase?.().then(r=>{
+        window.loadOpenOrdersFromSupabase?.({force:true,silent:true}).then(r=>{
           if(r?.ok&&activeTab==='carga'){renderMesasSection();renderReservasSection();}
         }).catch(()=>{});
       },300);
@@ -4066,9 +4066,25 @@ if(config.webappUrl){loadFromSheets();}
   let ooCount=0;
   let ooItemCount=0;
 
+  // ── Debounce / cooldown ────────────────────────────
+  let ooFetching=false;
+  let ooLastFetch=0;
+  const OO_COOLDOWN=8000;   // mín 8s entre lecturas automáticas
+  const OO_FORCE_COOLDOWN=2000; // mín 2s para refresh manual
+
   // ── Helpers ───────────────────────────────────────
-  function ooClient(){return window.getSupabaseClient?.();}
-  function ooStoreId(){return window.getActiveStoreId?.()||window.config?.activeStoreId||'';}
+  function ooClient(){
+    // Prioridad: cliente autenticado del IIFE (con sesión activa) → getSupabaseClient → null
+    return window.__coloSupabaseClient || window.getSupabaseClient?.() || null;
+  }
+  function ooStoreId(){
+    // Múltiples caminos para leer el store activo
+    const fromFn=window.getActiveStoreId?.();
+    if(fromFn) return String(fromFn);
+    const fromConfig=(window.config&&window.config.activeStoreId)||'';
+    if(fromConfig) return String(fromConfig);
+    try{ return JSON.parse(localStorage.getItem('config')||'{}').activeStoreId||''; }catch{return '';}
+  }
   function ooReady(){return !!(ooClient()&&ooStoreId());}
   function ooStamp(){
     try{return(typeof window.getLocalDateString==='function')?`${window.getLocalDateString()} ${window.getLocalTimeString?.()??''}`:new Date().toLocaleString();}
@@ -4076,15 +4092,45 @@ if(config.webappUrl){loadFromSheets();}
   }
   function ooSetState(s,err){ooState=s;ooError=err||'';ooUpdateDiag();}
 
+  // Esperar a que Supabase esté listo (máx maxMs ms)
+  async function waitForOOReady(maxMs=3000){
+    if(ooReady())return true;
+    const step=250;let elapsed=0;
+    while(elapsed<maxMs){
+      await new Promise(r=>setTimeout(r,step));
+      elapsed+=step;
+      if(ooReady())return true;
+    }
+    return false;
+  }
+
   // ── Load: Supabase → local mesas ──────────────────
-  async function loadOpenOrdersFromSupabase(){
+  // options: { force=false (fuerza aunque cooldown), silent=true (sin toasts al cliente) }
+  async function loadOpenOrdersFromSupabase({force=false,silent=true}={}){
+    const now=Date.now();
+    const minCooldown=force?OO_FORCE_COOLDOWN:OO_COOLDOWN;
+    // Cooldown: evitar spam
+    if(ooFetching)return{ok:false,reason:'already_fetching'};
+    if(!force && now-ooLastFetch<minCooldown)return{ok:false,reason:'cooldown'};
+
+    // Si no hay cliente aún, esperar hasta 3s (Supabase puede estar inicializando)
+    if(!ooReady()){
+      const ready=await waitForOOReady(3000);
+      if(!ready){
+        // No disponible — mantener mesas locales, sin error para usuario
+        return{ok:false,reason:'not_ready'};
+      }
+    }
+
     const client=ooClient();
     const storeId=ooStoreId();
     if(!client||!storeId)return{ok:false,reason:'no_client'};
 
+    ooFetching=true;
+    ooLastFetch=Date.now();
     ooSetState('syncing','');
     try{
-      // Intentamos las columnas extendidas primero; si fallan por schema, reintentamos con columnas base
+      // SELECT con columnas que existen en cualquier schema estándar de open_orders
       let orders,ordersErr;
       const extendedCols='id,store_id,shift_id,operator_name,operator_id,service_type,table_label,metadata,created_at';
       ({data:orders,error:ordersErr}=await client
@@ -4148,8 +4194,20 @@ if(config.webappUrl){loadFromSheets();}
       ooState='supabase';ooError='';ooLastRead=ooStamp();ooCount=orders.length;ooItemCount=(items||[]).length;ooUpdateDiag();
       return{ok:true,count:orders.length};
     }catch(err){
-      ooSetState('error',err?.message||String(err));
-      return{ok:false,error:err};
+      const msg=err?.message||String(err)||'Error desconocido';
+      ooSetState('error',msg);
+      // Solo mostrar mensaje al cliente si es un error real de red/permisos y no es silencioso
+      if(!silent && typeof window.showToast==='function'){
+        const isPermission=msg.toLowerCase().includes('permission')||msg.toLowerCase().includes('rls')||msg.toLowerCase().includes('policy');
+        if(isPermission){
+          showToast('Sin acceso a mesas en la nube. Verificá permisos en Supabase.');
+        } else {
+          showToast('Trabajando sin conexión. Los cambios se sincronizarán cuando vuelva la conexión.');
+        }
+      }
+      return{ok:false,error:err,message:msg};
+    }finally{
+      ooFetching=false;
     }
   }
 
@@ -4287,14 +4345,44 @@ if(config.webappUrl){loadFromSheets();}
     if(!el)return;
     const label=ooState==='supabase'?'✅ Supabase'
       :ooState==='syncing'?'⏳ Sincronizando…'
-      :ooState==='error'?`❌ ${ooError}`
+      :ooState==='error'?`❌ Error`
       :'📦 Local / fallback';
-    el.innerHTML=`<div><strong>Fuente mesas abiertas:</strong> ${label}</div>`
-      +`<div><strong>open_orders cargadas:</strong> ${ooCount}</div>`
-      +`<div><strong>open_order_items cargados:</strong> ${ooItemCount}</div>`
+    const clientOk=!!(window.__coloSupabaseClient||window.getSupabaseClient?.());
+    const storeOk=!!ooStoreId();
+    el.innerHTML=`<div><strong>Fuente:</strong> ${label}</div>`
+      +`<div><strong>Cliente Supabase:</strong> ${clientOk?'✅ listo':'❌ no disponible'}</div>`
+      +`<div><strong>Store ID:</strong> ${ooStoreId()||'❌ no detectado'}</div>`
+      +`<div><strong>open_orders:</strong> ${ooCount} &nbsp;|&nbsp; <strong>items:</strong> ${ooItemCount}</div>`
       +(ooLastRead?`<div><strong>Última lectura:</strong> ${ooLastRead}</div>`:'')
-      +(ooError?`<div><strong>Último error:</strong> ${ooError}</div>`:'');
+      +(ooError?`<div style="color:var(--red)"><strong>Último error:</strong> ${ooError}</div>`:'');
   }
+
+  // ── Refresh helper unificado con debounce ─────────
+  // Llama a loadOpenOrdersFromSupabase y re-renderiza si hubo cambios.
+  // ctx: contexto de llamada ('tab'|'focus'|'interval'|'post_action') — solo para debug
+  async function triggerOORefresh(ctx){
+    const r=await loadOpenOrdersFromSupabase({force:ctx==='post_action',silent:true});
+    if(r?.ok){
+      if(typeof window.renderMesasSection==='function') window.renderMesasSection();
+      if(typeof window.renderReservasSection==='function') window.renderReservasSection();
+    }
+    // En modo técnico: actualizar diagnóstico siempre
+    ooUpdateDiag();
+    return r;
+  }
+
+  // ── Auto-refresh por intervalo (20s mientras Caja activo) ─
+  let ooIntervalId=null;
+  function startOOInterval(){
+    if(ooIntervalId)return;
+    ooIntervalId=setInterval(()=>{
+      if(window.activeTab==='carga'&&document.visibilityState==='visible'){
+        triggerOORefresh('interval');
+      }
+    },20000);
+  }
+  // Arrancar inmediatamente (el intervalo se auto-controla por activeTab)
+  startOOInterval();
 
   // ── Exponer globalmente ────────────────────────────
   window.loadOpenOrdersFromSupabase=loadOpenOrdersFromSupabase;
@@ -4302,16 +4390,12 @@ if(config.webappUrl){loadFromSheets();}
   window.deleteOpenOrderFromSupabase=deleteOpenOrderFromSupabase;
   window.checkOpenOrderStillOpen=checkOpenOrderStillOpen;
   window.updateOODiag=ooUpdateDiag;
+  window.triggerOORefresh=triggerOORefresh;
 
   // ── Visibilitychange: sincronizar al volver al foco ─
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'){
-      window.loadOpenOrdersFromSupabase?.().then(r=>{
-        if(r?.ok&&typeof window.renderMesasSection==='function'){
-          window.renderMesasSection();
-          if(typeof window.renderReservasSection==='function')window.renderReservasSection();
-        }
-      }).catch(()=>{});
+    if(document.visibilityState==='visible'&&window.activeTab==='carga'){
+      triggerOORefresh('focus');
     }
   });
 })();
