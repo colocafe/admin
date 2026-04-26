@@ -1428,6 +1428,9 @@ function emptyMixedPayments(){return{efectivo:'',mercado_pago:'',transferencia:'
 let carrito={},pago='ef',paymentMode='single',mixedPayments=emptyMixedPayments(),catCarga='todos',editId=null;
 let editClienteId=null,editReservaId=null,activeTab='carga';
 let mesaActivaId=null,tipoNuevaMesa='salon',dashFiltro='hoy';
+let dashboardRangeWasManuallySelected=false;
+let dashboardInitialRangeResolved=false;
+let dashboardSmartRangeMessage='';
 let prodParaVariantes=null,variantesSeleccionadas={};
 let clienteModalRetorno=null,tipoNuevaMesaReserva='salon';
 let reservaPago='ef',reservaCarrito={},catReserva='todos';
@@ -1628,6 +1631,36 @@ function attachProductCardHandlers(container,handlerName){
 }
 function dashRango(){const hoy=today();if(dashFiltro==='hoy')return{desde:hoy,hasta:hoy};if(dashFiltro==='semana'){const d=addLocalDays(new Date(),-6);return{desde:getLocalDateString(d),hasta:hoy};}if(dashFiltro==='mes'){const d=new Date();d.setDate(1);return{desde:getLocalDateString(d),hasta:hoy};}return{desde:$('dash-desde')?.value||hoy,hasta:$('dash-hasta')?.value||hoy};}
 
+// ── Smart default range — se ejecuta una vez por sesión al abrir el dashboard ──
+function ensureSmartDashboardDefaultRange(){
+  if(dashboardInitialRangeResolved||dashboardRangeWasManuallySelected){
+    dashboardInitialRangeResolved=true;return;
+  }
+  dashboardInitialRangeResolved=true;
+  const hoy=today();
+  function countLocal(desde,hasta){return(ventas||[]).filter(v=>v.fecha>=desde&&v.fecha<=hasta).length;}
+  // Si hay ventas hoy: quedarse en 'hoy'
+  if(countLocal(hoy,hoy)>0){dashboardSmartRangeMessage='';return;}
+  // Si hay ventas esta semana: cambiar a 'semana'
+  const semDesde=getLocalDateString(addLocalDays(new Date(),-6));
+  if(countLocal(semDesde,hoy)>0){
+    dashFiltro='semana';
+    dashboardSmartRangeMessage='Mostrando esta semana — hoy sin actividad';
+    ['hoy','semana','mes','custom'].forEach(x=>$('dfiltro-'+x)?.classList.toggle('active',x==='semana'));
+    return;
+  }
+  // Si hay ventas este mes: cambiar a 'mes'
+  const mesDesde=(()=>{const d=new Date();d.setDate(1);return getLocalDateString(d);})();
+  if(countLocal(mesDesde,hoy)>0){
+    dashFiltro='mes';
+    dashboardSmartRangeMessage='Mostrando este mes — semana sin actividad';
+    ['hoy','semana','mes','custom'].forEach(x=>$('dfiltro-'+x)?.classList.toggle('active',x==='mes'));
+    return;
+  }
+  // Sin actividad en ningún período: quedarse en 'hoy'
+  dashboardSmartRangeMessage='';
+}
+
 // ── Dashboard: comparación vs período anterior ────────────────
 function getPreviousComparisonRange(filtro,desde,hasta){
   if(filtro==='hoy'){
@@ -1700,7 +1733,7 @@ function goTab(id){
   $('tab-'+id)?.classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
   if(id==='carga')    renderVentas();
-  if(id==='dashboard')renderDashboard();
+  if(id==='dashboard'){ensureSmartDashboardDefaultRange();renderDashboard();}
   if(id==='historial')renderHistorial();
   if(id==='clientes') renderClientesTab();
   if(id==='ajustes')  renderAjustes();
@@ -2716,6 +2749,8 @@ function guardarReserva(){
 //  DASHBOARD
 // ══════════════════════════════════════════════════
 function setDashFiltro(f){
+  dashboardRangeWasManuallySelected=true;
+  dashboardSmartRangeMessage='';
   dashFiltro=f;
   ['hoy','semana','mes','custom'].forEach(x=>{$(`dfiltro-${x}`)?.classList.toggle('active',x===f);});
   $('dash-custom-range').style.display=f==='custom'?'flex':'none';
@@ -2768,6 +2803,7 @@ function renderDashboard(){
       else if((dashboardState?.error||'').toLowerCase().includes('store')) simpleMsg='Elegí una tienda activa para ver el dashboard.';
       else if(useSupabase&&txP===0&&!dashboardState?.error) simpleMsg='No hay ventas en Supabase para este rango.';
       else if(useFallback) simpleMsg='Mostrando datos disponibles.';
+      else if(dashboardSmartRangeMessage) simpleMsg=dashboardSmartRangeMessage;
       dashStatus.style.display=simpleMsg?'block':'none';
       dashStatus.textContent=simpleMsg;
     }
@@ -8781,31 +8817,50 @@ if(config.webappUrl){loadFromSheets();}
       renderSalesSupabaseUi();
       return null;
     }
+    // Safety net: flag dentro del try → finally SIEMPRE lo libera, pase lo que pase
+    try{
     dashboardVisibleLoading=true;
     renderSalesSupabaseUi();
-    try{
-      if(typeof window.reloadExpensesFromSupabase==='function'){
-        await window.reloadExpensesFromSupabase(true).catch(()=>{});
+      // Gastos: timeout de 8s, nunca bloquea el dashboard
+      try{
+        if(typeof window.reloadExpensesFromSupabase==='function'){
+          await Promise.race([
+            window.reloadExpensesFromSupabase(true),
+            new Promise(r=>setTimeout(r,8000))
+          ]).catch(()=>{});
+        }
+      }catch(_){}
+      // Ventas: timeout de 20s para no quedar colgado indefinidamente
+      let preview;
+      try{
+        preview=await Promise.race([
+          loadSalesFromSupabasePreview({...appliedRange,limit:false,forceRefresh,silent:true}),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('Tiempo de espera agotado — reintentá en un momento')),20000))
+        ]);
+      }catch(e){
+        preview=null;
+        salesPreviewLastError=e?.message||String(e);
       }
-    }catch(_){}
-    try{
-      const preview=await loadSalesFromSupabasePreview({...appliedRange,limit:false,forceRefresh,silent:true});
-      if(!preview) throw new Error(salesPreviewLastError||'No se pudo leer dashboard desde Supabase');
+      if(!preview) throw new Error(salesPreviewLastError||'No se pudo cargar el dashboard');
       const rows=preview.comparableRows||[];
       const tickets=groupLocalSaleRowsByTicket(rows);
       const total=money2((preview.sales||[]).reduce((sum,sale)=>sum+(Number(sale.total_amount)||0),0));
-      // Cargar total del período anterior (lightweight query, best-effort)
+      // Período anterior — best-effort con timeout de 8s
       const prevRange=getPreviousComparisonRange(dashFiltro,appliedRange.desde,appliedRange.hasta);
       let prevPeriodTotal=null;
       try{
         const storeId=getSalesStoreId();
         const client=getSalesSupabaseClient();
         if(storeId&&client){
-          const{data:prevSales}=await client.from('sales')
+          const prevQuery=client.from('sales')
             .select('total_amount,legacy_source,metadata')
             .eq('store_id',storeId)
             .gte('business_date',prevRange.desde)
             .lte('business_date',prevRange.hasta);
+          const {data:prevSales}=await Promise.race([
+            prevQuery,
+            new Promise(r=>setTimeout(()=>r({data:null}),8000))
+          ]);
           if(prevSales){
             prevPeriodTotal=money2((prevSales||[])
               .filter(s=>!shouldExcludePreviewSale(s,{}))
@@ -8829,16 +8884,17 @@ if(config.webappUrl){loadFromSheets();}
       });
       if(activeTab==='dashboard') renderDashboard();
       renderSalesSupabaseUi();
-      if(!silent) showToast(`Dashboard Supabase cargado: ${tickets.length} tickets`);
+      if(!silent) showToast(`Dashboard cargado: ${tickets.length} tickets`);
       return window.getDashboardState();
     }catch(err){
       const local=buildLocalDashboardDataset(appliedRange);
-      setDashboardState({...local,lastReadAt:stampSalesMoment(),error:err?.message||String(err)||'Dashboard en modo local/fallback',loading:false});
+      setDashboardState({...local,lastReadAt:stampSalesMoment(),error:err?.message||String(err)||'Sin conexión',loading:false});
       if(activeTab==='dashboard') renderDashboard();
       renderSalesSupabaseUi();
-      if(!silent) showToast(`Dashboard en modo local/fallback: ${err?.message||String(err)}`);
+      if(!silent) showToast('Mostrando datos locales — sin conexión al servidor.');
       return null;
     }finally{
+      // Siempre liberar el flag, pase lo que pase
       dashboardVisibleLoading=false;
       renderSalesSupabaseUi();
     }
