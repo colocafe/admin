@@ -3998,13 +3998,13 @@ if(config.webappUrl){loadFromSheets();}
       supabaseUser=data.session?.user||null;
       if(supabaseUser) await loadSupabaseContext();
       else renderSupabaseStatus();
-      if(showToastOnReady && window.showToast) showToast(supabaseUser ? '✓ Supabase conectado' : '✓ Supabase listo');
+      if(showToastOnReady && window.showToast) showToast(supabaseUser ? '✓ Conexión lista' : '✓ Sistema listo');
       return true;
     }catch(err){
       console.error('Supabase init error', err);
       supabaseClient=null;
       clearSupabaseContext();
-      if(showToastOnReady && window.showToast) showToast(err.message||'No se pudo conectar Supabase');
+      if(showToastOnReady && window.showToast) showToast(err.message||'No se pudo establecer la conexión');
       return false;
     }
   }
@@ -4062,7 +4062,7 @@ if(config.webappUrl){loadFromSheets();}
   };
 
   window.supabaseSignUp=async function(){
-    if(!supabaseClient){ if(window.showToast) showToast('Configurá Supabase primero'); return; }
+    if(!supabaseClient){ if(window.showToast) showToast('Configurá la conexión primero'); return; }
     const {name,email,password}=getSupabaseAuthForm();
     if(!email || password.length<6){ if(window.showToast) showToast('Ingresá email y una contraseña de al menos 6 caracteres'); return; }
     const { data, error } = await supabaseClient.auth.signUp({
@@ -4196,12 +4196,12 @@ if(config.webappUrl){loadFromSheets();}
           await initSupabaseClient();
         }catch(err){
           console.error('[Supabase optional init failed]', err);
-          try{ if(window.showToast) showToast('Supabase opcional no disponible'); }catch(_){}
+          try{ if(window.showToast) showToast('Servicio no disponible'); }catch(_){}
         }
       }
     }catch(err){
       console.error('[Supabase optional init failed]', err);
-      try{ if(window.showToast) showToast('Supabase opcional no disponible'); }catch(_){}
+      try{ if(window.showToast) showToast('Servicio no disponible'); }catch(_){}
     }
   };
 
@@ -5133,13 +5133,13 @@ if(config.webappUrl){loadFromSheets();}
       catalogLastProbeAt=stampCatalogMoment();
       if(diag.error){
         setCatalogLoadState('error',diag.error);
-        if(!silent) showToast('Catálogo local activo · Supabase no respondió');
+        if(!silent) showToast('Sin conexión. Mostrando menú guardado.');
         return false;
       }
       const categoryRows=(diag.categoryRows||[]).filter(r=>r.active!==false);
       const productRows=(diag.productRows||[]).filter(r=>r.active!==false);
       if(!categoryRows.length){
-        if(!silent) showToast('Supabase sin categorías activas. Se mantiene el local.');
+        if(!silent) showToast('No hay categorías activas. Mostrando menú guardado.');
         setCatalogLoadState('local');
         renderCatalogSupabaseUi();
         return false;
@@ -5154,12 +5154,12 @@ if(config.webappUrl){loadFromSheets();}
       save();
       refreshCatalogUi();
       setCatalogLoadState('supabase');
-      if(!silent) showToast('✓ Catálogo cargado desde Supabase');
+      if(!silent) showToast('✓ Menú actualizado');
       return true;
     }catch(err){
       console.error('[Catalog Supabase load failed]', err);
       setCatalogLoadState('error', err.message||String(err));
-      if(!silent) showToast('Catálogo local activo · Supabase no respondió');
+      if(!silent) showToast('Sin conexión. Mostrando menú guardado.');
       return false;
     }
   };
@@ -5172,11 +5172,11 @@ if(config.webappUrl){loadFromSheets();}
     catalogLastProbeAt=stampCatalogMoment();
     if(diag.error){
       setCatalogLoadState('error',diag.error);
-      showToast(`Lectura Supabase falló: ${diag.error}`);
+      showToast(`Prueba de lectura falló: ${diag.error}`);
       return;
     }
     renderCatalogSupabaseUi();
-    showToast(`Lectura OK · ${diag.supabaseCounts.categories} categorías y ${diag.supabaseCounts.products} productos`);
+    showToast(`✓ Lectura OK · ${diag.supabaseCounts.categories} categorías y ${diag.supabaseCounts.products} productos`);
   };
   window.reloadCatalogFromSupabase=async function(){
     const ok=await loadCatalogFromSupabase({silent:false});
@@ -5305,7 +5305,7 @@ if(config.webappUrl){loadFromSheets();}
 
   window.syncLocalCatalogToSupabase=async function(){
     if(!hasCatalogSupabaseReady()){
-      showToast('Configurá Supabase y una store activa primero');
+      showToast('Configurá la conexión y la tienda activa primero.');
       return;
     }
     setCatalogLoadState('syncing');
@@ -5351,13 +5351,13 @@ if(config.webappUrl){loadFromSheets();}
       setCatalogLoadState('supabase');
       catalogLastSyncAt=`subida ${stampCatalogMoment()}`;
       renderCatalogSupabaseUi();
-      showToast(`✓ Sync catálogo · cats ${summary.localCats} (${summary.categoriesInserted} nuevas/${summary.categoriesUpdated} actualizadas) · productos ${summary.localProducts} (${summary.productsInserted} nuevos/${summary.productsUpdated} actualizados)${summary.errors.length?` · errores ${summary.errors.length}`:''}`);
+      showToast(`✓ Catálogo actualizado · ${summary.localCats} categorías · ${summary.localProducts} productos${summary.errors.length?` · ${summary.errors.length} error${summary.errors.length===1?'':'es'}`:''}`);
       console.log('[Catalog Supabase sync summary]',summary);
       await loadCatalogFromSupabase({silent:true});
     }catch(err){
       console.error('[Catalog Supabase sync failed]', err);
       setCatalogLoadState('error', err.message||String(err));
-      showToast('Guardado local OK · Error al subir catálogo a Supabase');
+      showToast('Menú guardado. Falló la sincronización con el servidor.');
     }
   };
   function warnSupabaseCatalogFailure(kind,err){
@@ -5398,7 +5398,7 @@ if(config.webappUrl){loadFromSheets();}
   window.debugCatalogWritePermissions=async function(){
     if(!hasCatalogSupabaseReady()){
       console.warn('[debugCatalogWritePermissions] Supabase no configurado o sin store activa');
-      showToast('Supabase no configurado o sin store activa');
+      showToast('Configurá la conexión y la tienda activa primero.');
       return;
     }
     const client=getCatalogSupabaseClient();
@@ -5896,13 +5896,13 @@ if(config.webappUrl){loadFromSheets();}
         crLastReadAt=stampCrMoment();
         if(diag.error){
           setCrState('error',diag.error);
-          if(!silent) showToast('Clientes locales activos · Supabase no respondió');
+          if(!silent) showToast('Sin conexión. Mostrando clientes guardados.');
           return false;
         }
       }
       const rows=customerRowsOverride || diag.customers;
       if(!rows.length){
-        if(!silent) showToast('Supabase sin clientes. Se mantiene local.');
+        if(!silent) showToast('No hay clientes registrados todavía.');
         setCrState('local');
         renderCrSupabaseUi();
         return false;
@@ -5916,7 +5916,7 @@ if(config.webappUrl){loadFromSheets();}
     }catch(err){
       console.error('[Customers load failed]',err);
       setCrState('error',err.message||String(err));
-      if(!silent) showToast('Clientes locales activos · Error Supabase');
+      if(!silent) showToast('Sin conexión. Mostrando clientes guardados.');
       return false;
     }
   };
@@ -5932,13 +5932,13 @@ if(config.webappUrl){loadFromSheets();}
         crLastReadAt=stampCrMoment();
         if(diag.error){
           setCrState('error',diag.error);
-          if(!silent) showToast('Reservas locales activas · Supabase no respondió');
+          if(!silent) showToast('Sin conexión. Mostrando reservas guardadas.');
           return false;
         }
       }
       const reservationRows=reservationRowsOverride || diag.reservations;
       if(!reservationRows.length){
-        if(!silent) showToast('Supabase sin reservas. Se mantiene local.');
+        if(!silent) showToast('No hay reservas registradas todavía.');
         setCrState('local');
         renderCrSupabaseUi();
         return false;
@@ -5953,7 +5953,7 @@ if(config.webappUrl){loadFromSheets();}
     }catch(err){
       console.error('[Reservations load failed]',err);
       setCrState('error',err.message||String(err));
-      if(!silent) showToast('Reservas locales activas · Error Supabase');
+      if(!silent) showToast('Sin conexión. Mostrando reservas guardadas.');
       return false;
     }
   };
@@ -6052,7 +6052,7 @@ if(config.webappUrl){loadFromSheets();}
     return data;
   };
   window.syncLocalCustomersToSupabase=async function(){
-    if(!hasCrSupabaseReady()){showToast('Configurá Supabase y una store activa primero');return;}
+    if(!hasCrSupabaseReady()){showToast('Configurá tu conexión y seleccioná una tienda primero');return;}
     try{
       setCrState('syncing');
       const client=window.getSupabaseClient?.();
@@ -6073,11 +6073,11 @@ if(config.webappUrl){loadFromSheets();}
       setCrState('supabase');
       renderCrSupabaseUi();
       console.log('[Customers sync summary]',summary);
-      showToast(`✓ Clientes sync · ${summary.local} locales · ${summary.inserted} nuevos · ${summary.updated} actualizados${summary.errors.length?` · errores ${summary.errors.length}`:''}`);
+      showToast(`✓ Clientes actualizados · ${summary.inserted} nuevos · ${summary.updated} actualizados${summary.errors.length?` · ${summary.errors.length} error${summary.errors.length===1?'':'es'}`:''}`);
     }catch(err){
       console.error('[Customers sync failed]',err);
       setCrState('error',err.message||String(err));
-      showToast(`Clientes locales OK · Supabase rechazó sync: ${err.message||err}`);
+      showToast('Clientes guardados. Falló la sincronización con el servidor.');
     }
   };
   window.saveReservationToSupabase=async function(reservation,opts={}){
@@ -6146,7 +6146,7 @@ if(config.webappUrl){loadFromSheets();}
     return data;
   };
   window.syncLocalReservationsToSupabase=async function(){
-    if(!hasCrSupabaseReady()){showToast('Configurá Supabase y una store activa primero');return;}
+    if(!hasCrSupabaseReady()){showToast('Configurá tu conexión y seleccioná una tienda primero');return;}
     try{
       setCrState('syncing');
       const client=window.getSupabaseClient?.();
@@ -6168,11 +6168,11 @@ if(config.webappUrl){loadFromSheets();}
       setCrState('supabase');
       renderCrSupabaseUi();
       console.log('[Reservations sync summary]',summary);
-      showToast(`✓ Reservas sync · ${summary.local} locales · ${summary.inserted} nuevas · ${summary.updated} actualizadas${summary.errors.length?` · errores ${summary.errors.length}`:''}`);
+      showToast(`✓ Reservas actualizadas · ${summary.inserted} nuevas · ${summary.updated} actualizadas${summary.errors.length?` · ${summary.errors.length} error${summary.errors.length===1?'':'es'}`:''}`);
     }catch(err){
       console.error('[Reservations sync failed]',err);
       setCrState('error',err.message||String(err));
-      showToast(`Reservas locales OK · Supabase rechazó sync: ${err.message||err}`);
+      showToast('Reservas guardadas. Falló la sincronización con el servidor.');
     }
   };
   window.syncLocalCustomersReservationsToSupabase=async function(){
@@ -6182,7 +6182,7 @@ if(config.webappUrl){loadFromSheets();}
   function warnCrSupabaseFailure(kind,err){
     console.warn(`[Customers/Reservations sync failed] ${kind}`,err);
     setCrState('error',err?.message||String(err));
-    showToast(`Supabase rechazó ${kind}: ${err?.message||err}`);
+    showToast('No se pudo guardar en el servidor. Reintentá en unos segundos.');
   }
   function scheduleCrLoad(){ setTimeout(()=>window.reloadCustomersReservationsFromSupabase?.(true),250); }
   window.probeCustomersReservationsSupabase=async function(){
@@ -6208,7 +6208,7 @@ if(config.webappUrl){loadFromSheets();}
       crLastReadAt=stampCrMoment();
       if(diag.error){
         setCrState('error',diag.error);
-        if(!silent) showToast(`Fallback local · ${diag.error}`);
+        if(!silent) showToast('Sin conexión. Mostrando datos guardados.');
         return false;
       }
       const customersOk=await loadCustomersFromSupabase({silent:true,customerRowsOverride:diag.customers});
@@ -6216,14 +6216,14 @@ if(config.webappUrl){loadFromSheets();}
       const reservationsOk=await loadReservationsFromSupabase({silent:true,reservationRowsOverride:diag.reservations,customerRowsForMap:customerMapRows});
       if(customersOk||reservationsOk){
         setCrState('supabase');
-        if(!silent) showToast('✓ Clientes y reservas cargados desde Supabase');
+        if(!silent) showToast('✓ Clientes y reservas actualizados');
         return true;
       }
       return false;
     }catch(err){
       console.error('[Customers/Reservations optional load failed]',err);
       setCrState('error',err?.message||String(err));
-      if(!silent) showToast(`Fallback local · ${err?.message||err}`);
+      if(!silent) showToast('Sin conexión. Mostrando datos guardados.');
       return false;
     }
   };
@@ -6876,7 +6876,7 @@ if(config.webappUrl){loadFromSheets();}
       }
       const rows=expenseRowsOverride || diag.rows;
       if(!Array.isArray(rows) || !rows.length){
-        if(!silent) showToast('Supabase sin gastos. Se mantiene local.');
+        if(!silent) showToast('No hay gastos registrados todavía.');
         setExpensesState('local');
         renderExpensesSupabaseUi();
         return false;
@@ -6889,7 +6889,7 @@ if(config.webappUrl){loadFromSheets();}
     }catch(err){
       console.error('[Expenses load failed]',err);
       setExpensesState('error',err?.message||String(err));
-      if(!silent) showToast('Gastos locales activos · Error Supabase');
+      if(!silent) showToast('Sin conexión. Mostrando gastos guardados.');
       return false;
     }
   };
@@ -6957,7 +6957,7 @@ if(config.webappUrl){loadFromSheets();}
     return data;
   };
   window.syncLocalExpensesToSupabase=async function(){
-    if(!hasExpensesSupabaseReady()){showToast('Configurá Supabase y una store activa primero');return;}
+    if(!hasExpensesSupabaseReady()){showToast('Configurá tu conexión y seleccioná una tienda primero');return;}
     try{
       setExpensesState('syncing');
       const client=window.getSupabaseClient?.();
@@ -6980,11 +6980,11 @@ if(config.webappUrl){loadFromSheets();}
       setExpensesState('supabase');
       renderExpensesSupabaseUi();
       console.log('[Expenses sync summary]',summary);
-      showToast(`✓ Gastos sync · ${summary.local} locales · ${summary.inserted} nuevos · ${summary.updated} actualizados${summary.errors.length?` · errores ${summary.errors.length}`:''}`);
+      showToast(`✓ Gastos actualizados · ${summary.inserted} nuevos · ${summary.updated} actualizados${summary.errors.length?` · ${summary.errors.length} error${summary.errors.length===1?'':'es'}`:''}`);
     }catch(err){
       console.error('[Expenses sync failed]',err);
       setExpensesState('error',err?.message||String(err));
-      showToast(`Gastos locales OK · Supabase rechazó sync: ${err?.message||err}`);
+      showToast('Gastos guardados. Falló la sincronización con el servidor.');
     }
   };
   window.reloadExpensesFromSupabase=async function(silent=false){
@@ -6996,14 +6996,14 @@ if(config.webappUrl){loadFromSheets();}
       expensesLastReadAt=stampExpensesMoment();
       if(diag.error){
         setExpensesState('error',diag.error);
-        if(!silent) showToast(`Fallback local · ${diag.error}`);
+        if(!silent) showToast('Sin conexión. Mostrando datos guardados.');
         return false;
       }
       return await loadExpensesFromSupabase({silent:true,expenseRowsOverride:diag.rows});
     }catch(err){
       console.error('[Expenses optional load failed]',err);
       setExpensesState('error',err?.message||String(err));
-      if(!silent) showToast(`Fallback local · ${err?.message||err}`);
+      if(!silent) showToast('Sin conexión. Mostrando datos guardados.');
       return false;
     }
   };
@@ -7602,7 +7602,7 @@ if(config.webappUrl){loadFromSheets();}
         shiftsRemoteOpen=(diag.openCount||0)>0;
         if(diag.error){
           setShiftsState('error',diag.error);
-          if(!silent) showToast(`Turno local activo · ${diag.error}`);
+          if(!silent) showToast('Sin conexión. Continuando con el turno guardado.');
           return false;
         }
         if(diag.openCount>1) console.warn('[Shifts warning] Hay múltiples turnos abiertos en Supabase para la store',diag.openRows);
@@ -7622,12 +7622,12 @@ if(config.webappUrl){loadFromSheets();}
       shiftsRemoteOpen=true;
       setShiftsState('supabase');
       refreshShiftUi();
-      if(!silent) showToast('✓ Turno cargado desde Supabase');
+      if(!silent) showToast('✓ Turno actualizado');
       return true;
     }catch(err){
       console.error('[Shifts load failed]',err);
       setShiftsState('error',err?.message||String(err));
-      if(!silent) showToast(`Fallback local · ${err?.message||err}`);
+      if(!silent) showToast('Sin conexión. Mostrando datos guardados.');
       return false;
     }
   };
@@ -7721,7 +7721,7 @@ if(config.webappUrl){loadFromSheets();}
   };
   window.syncLocalShiftToSupabase=async function(){
     if(!(turno&&turno.abierto)){showToast('No hay turno local abierto para subir');return false;}
-    if(!hasShiftsSupabaseReady()){showToast('Configurá Supabase y una store activa primero');return false;}
+    if(!hasShiftsSupabaseReady()){showToast('Configurá tu conexión y seleccioná una tienda primero');return false;}
     try{
       setShiftsState('syncing');
       const row=await saveShiftToSupabase(turno);
@@ -8542,7 +8542,7 @@ if(config.webappUrl){loadFromSheets();}
     salesLastProbeAt=stampSalesMoment();
     if(diag.error){
       setSalesWriteState('error',diag.error);
-      if(!silent) showToast(`Ventas Supabase: ${diag.error}`);
+      if(!silent) showToast('No pudimos verificar las ventas. Revisá la conexión.');
       return false;
     }
     if(salesWriteState!=='syncing') setSalesWriteState('ready');
@@ -8665,7 +8665,7 @@ if(config.webappUrl){loadFromSheets();}
         comparison:null
       };
       renderSalesSupabaseUi();
-      if(!opts.silent) showToast(`Preview ventas Supabase: ${filteredSales.length} tickets`);
+      // toast silenciado — carga automática de ventas en segundo plano
       return salesPreviewResult;
     }catch(err){
       salesPreviewLastError=err?.message||String(err);
@@ -8676,7 +8676,7 @@ if(config.webappUrl){loadFromSheets();}
         hint:err?.hint||''
       });
       renderSalesSupabaseUi();
-      if(!opts.silent) showToast(`Preview ventas falló: ${salesPreviewLastError}`);
+      if(!opts.silent) showToast('No pudimos cargar las ventas. Reintentá en unos segundos.');
       return null;
     }
   };
@@ -8838,7 +8838,7 @@ if(config.webappUrl){loadFromSheets();}
         opts:preview.opts||previewOpts
       };
       renderSalesSupabaseUi();
-      showToast(`Preview historial Supabase: ${tickets.length} tickets`);
+      // toast silenciado — carga automática de historial en segundo plano
       return historyPreviewResult;
     }catch(err){
       historyPreviewLastError=err?.message||String(err);
@@ -8849,7 +8849,7 @@ if(config.webappUrl){loadFromSheets();}
         hint:err?.hint||''
       });
       renderSalesSupabaseUi();
-      showToast(`Preview historial falló: ${historyPreviewLastError}`);
+      showToast('No pudimos cargar el historial. Reintentá en unos segundos.');
       return null;
     }
   };
@@ -8889,7 +8889,7 @@ if(config.webappUrl){loadFromSheets();}
       });
       if(activeTab==='historial') renderHistVentas();
       renderSalesSupabaseUi();
-      if(!silent) showToast(`Historial Supabase cargado: ${(preview.tickets||[]).length} tickets`);
+      if(!silent) showToast('✓ Historial actualizado');
       return preview;
     }catch(err){
       const localTickets=getLocalHistoryTickets();
@@ -8905,7 +8905,7 @@ if(config.webappUrl){loadFromSheets();}
       });
       if(activeTab==='historial') renderHistVentas();
       renderSalesSupabaseUi();
-      if(!silent) showToast(`Historial en modo local/fallback: ${err?.message||String(err)}`);
+      if(!silent) showToast('Trabajando sin conexión. Mostrando datos disponibles.');
       return null;
     }finally{
       historyVisibleLoading=false;
@@ -9326,8 +9326,8 @@ if(config.webappUrl){loadFromSheets();}
       }catch(_){}
     }
     renderSalesSupabaseUi();
-    if(okCount===pendingGroups.length) showToast(`Ventas pendientes sincronizadas: ${okCount}`);
-    else showToast(`Se sincronizaron ${okCount} de ${pendingGroups.length} ventas pendientes`);
+    if(okCount===pendingGroups.length) showToast(`✓ ${okCount} venta${okCount===1?'':'s'} enviada${okCount===1?'':'s'}`);
+    else showToast(`✓ ${okCount} de ${pendingGroups.length} ventas enviadas`);
   };
   window.debugPendingSalesSync=function(){
     const pendingGroups=findPendingSalesSyncGroups(ventas||[]);
@@ -9371,7 +9371,7 @@ if(config.webappUrl){loadFromSheets();}
         }
       }
       console.log('[Sales auto retry summary]',{reason,pending:pendingGroups.length,synced});
-      if(synced>0) showToast(`Ventas pendientes sincronizadas: ${synced}`);
+      if(synced>0) showToast(`✓ ${synced} venta${synced===1?'':'s'} enviada${synced===1?'':'s'}`);
       renderSalesSupabaseUi();
       return {ok:true,reason,pending:pendingGroups.length,synced};
     }finally{
@@ -9431,7 +9431,7 @@ if(config.webappUrl){loadFromSheets();}
     if(paymentCountDiffTickets.length) console.table(paymentCountDiffTickets);
     if(paymentAmountDiffTickets.length) console.table(paymentAmountDiffTickets);
     console.groupEnd();
-    showToast(`Comparación ventas: ${missingLocalInSupabase.length} local-only · ${missingSupabaseInLocal.length} remote-only · ${totalDiffTickets.length} con diferencia`);
+    showToast(`Comparación ventas: ${missingLocalInSupabase.length} sólo local · ${missingSupabaseInLocal.length} sólo remoto · ${totalDiffTickets.length} con diferencia`);
     return comparison;
   };
   window.compareLocalHistoryVsSupabaseHistory=async function(opts={}){
@@ -9490,7 +9490,7 @@ if(config.webappUrl){loadFromSheets();}
     if(itemDiffTickets.length) console.table(itemDiffTickets);
     if(shiftDiffTickets.length) console.table(shiftDiffTickets);
     console.groupEnd();
-    showToast(`Comparación historial: ${missingLocalInSupabase.length} local-only · ${missingSupabaseInLocal.length} remote-only · ${totalDiffTickets.length} diferencias`);
+    showToast(`Comparación historial: ${missingLocalInSupabase.length} sólo local · ${missingSupabaseInLocal.length} sólo remoto · ${totalDiffTickets.length} diferencias`);
     return comparison;
   };
   window.debugSalesReadSupabase=async function(opts={}){
@@ -9628,7 +9628,7 @@ commit;`;
     if(!key){showToast('Indicá un legacy_id válido');return null;}
     const client=getSalesSupabaseClient();
     const storeId=getSalesStoreId();
-    if(!hasSalesSupabaseReady()||!client){showToast('Configurá Supabase y una store activa primero');return null;}
+    if(!hasSalesSupabaseReady()||!client){showToast('Configurá tu conexión y seleccioná una tienda primero');return null;}
     try{
       const session=await getSalesSession(client);
       if(!session) throw new Error('No hay sesión activa');
@@ -9674,7 +9674,7 @@ commit;`;
   window.listCandidateTestSales=async function(limit=200){
     const client=getSalesSupabaseClient();
     const storeId=getSalesStoreId();
-    if(!hasSalesSupabaseReady()||!client){showToast('Configurá Supabase y una store activa primero');return [];}
+    if(!hasSalesSupabaseReady()||!client){showToast('Configurá tu conexión y seleccioná una tienda primero');return [];}
     try{
       const session=await getSalesSession(client);
       if(!session) throw new Error('No hay sesión activa');
@@ -9782,9 +9782,9 @@ commit;`;
     try{
       const remote=await markRemoteSaleManualTest(group);
       if(remote?.ok){
-        showToast('Última venta marcada como prueba en local y Supabase');
+        showToast('✓ Última venta marcada como prueba');
       }else{
-        showToast(`Última venta marcada localmente. Supabase: ${remote?.reason||'sin sync remoto'}`);
+        showToast(`Última venta marcada localmente. Remoto: ${remote?.reason||'sin sincronización remota'}`);
       }
     }catch(err){
       console.error('[Sales manual test mark failed]',{
@@ -9794,7 +9794,7 @@ commit;`;
         details:err?.details||'',
         hint:err?.hint||''
       });
-      showToast(`Venta marcada localmente, pero Supabase falló: ${err?.message||String(err)}`);
+      showToast(`Venta marcada localmente, pero falló el guardado remoto: ${err?.message||String(err)}`);
     }
     renderSalesSupabaseUi();
     console.group('[Sales manual test mark]');
@@ -9805,7 +9805,7 @@ commit;`;
   window.debugSalesWritePermissions=async function(){
     const storeId=getSalesStoreId();
     const client=getSalesSupabaseClient();
-    if(!hasSalesSupabaseReady()||!client){showToast('Configurá Supabase y una store activa primero');return;}
+    if(!hasSalesSupabaseReady()||!client){showToast('Configurá tu conexión y seleccioná una tienda primero');return;}
     console.group('[Sales Supabase write permissions]');
     let saleId=null;
     let paymentId=null;
