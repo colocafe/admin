@@ -1491,6 +1491,7 @@ const PAYMENT_METHODS=[
 function emptyMixedPayments(){return{efectivo:'',mercado_pago:'',transferencia:'',otro:''};}
 let carrito={},pago='ef',paymentMode='single',mixedPayments=emptyMixedPayments(),catCarga='todos',editId=null;
 let editClienteId=null,editReservaId=null,activeTab='carga';
+window.activeTab=activeTab;
 let mesaActivaId=null,tipoNuevaMesa='salon',dashFiltro='hoy';
 let dashboardRangeWasManuallySelected=false;
 let dashboardInitialRangeResolved=false;
@@ -1794,6 +1795,7 @@ updateDate();setInterval(updateDate,30000);
 document.querySelectorAll('.nav-btn').forEach(btn=>{btn.addEventListener('click',()=>goTab(btn.dataset.tab));});
 function goTab(id){
   activeTab=id;
+  window.activeTab=activeTab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   $('tab-'+id)?.classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
@@ -2320,9 +2322,13 @@ function renderVentas(){
   $('view-mesas').style.display='block';$('view-pedido').style.display='none';
   mesaActivaId=null;carrito={};
   renderStockAlerts();renderSetupBanner();
+  window.prepareOpenOrdersLoading?.();
   renderVentasFiltroChips();renderMesasSection();renderReservasSection();
   // Refresh silencioso en background — sin toast, sin bloquear UI
   window.triggerOORefresh?.('tab');
+  if(typeof window.reloadCustomersReservationsFromSupabase==='function'){
+    window.reloadCustomersReservationsFromSupabase(true).then(()=>renderReservasSection()).catch(()=>{});
+  }
 }
 // Refresh manual (solo modo técnico)
 async function actualizarMesas(){
@@ -2342,6 +2348,12 @@ function setVentasFiltro(t){ventasFiltroTipo=t;renderVentasFiltroChips();renderM
 
 function renderMesasSection(){
   const c=$('mesas-container'),e=$('mesas-empty');if(!c)return;
+  const ooSync=window.getOpenOrdersSyncState?.();
+  if(ooSync?.state==='syncing' && !ooSync?.hasSupabaseRead){
+    c.innerHTML='<div class="empty">Cargando mesas…</div>';
+    if(e)e.style.display='none';
+    return;
+  }
   const f=ventasFiltroTipo==='todos'?mesas:mesas.filter(m=>m.tipo===ventasFiltroTipo);
   if(!f.length){c.innerHTML='';e.style.display='block';return;}
   e.style.display='none';
@@ -2393,13 +2405,16 @@ function abrirNuevaMesa(){
 function selTipo(t){tipoNuevaMesa=t;['salon','delivery','takeaway'].forEach(x=>{$(`tipo-btn-${x}`).className=`tipo-btn${x===t?' sel-'+x:''}`;});}
 function cerrarModalNuevaMesa(){$('modal-nueva-mesa').classList.remove('open');}
 function closeModalNuevaMesa(e){if(e.target===$('modal-nueva-mesa'))cerrarModalNuevaMesa();}
-function confirmarNuevaMesa(){
+async function confirmarNuevaMesa(){
   const nombre=$('nueva-mesa-input').value.trim();if(!nombre){showToast('Ingresá un nombre');return;}
   const m={id:'m_'+Date.now(),nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null};
   mesas.push(m);save();syncMesasSheets();cerrarModalNuevaMesa();
-  window.syncMesaToSupabase?.(m).catch(()=>{});
+  const synced=await window.syncMesaToSupabase?.(m).catch(()=>false);
+  if(synced===false && window.getOpenOrdersSyncState?.()?.ready){
+    showToast('Trabajando sin conexión. Las mesas se actualizarán cuando vuelva la conexión.');
+  }
   // Post-creación: forzar refresh rápido para sincronizar con otros dispositivos
-  setTimeout(()=>window.triggerOORefresh?.('post_action'),1500);
+  setTimeout(()=>window.triggerOORefresh?.('post_action'),600);
   abrirMesa(m.id);
 }
 document.addEventListener('DOMContentLoaded',()=>{
@@ -2445,7 +2460,12 @@ function volverAMesas(){
 function saveMesaCarrito(){
   if(!mesaActivaId||mesaActivaId.startsWith('reserva_'))return;
   const m=mesas.find(x=>x.id===mesaActivaId);
-  if(m){m.items={...carrito};save();syncMesasSheets();window.syncMesaToSupabase?.(m).catch(()=>{});}
+  if(m){
+    m.items={...carrito};save();syncMesasSheets();
+    window.syncMesaToSupabase?.(m)
+      .then(ok=>{ if(ok) setTimeout(()=>window.triggerOORefresh?.('post_action'),300); })
+      .catch(()=>{});
+  }
 }
 
 // ── Operador al cobrar ─────────────────────────────
@@ -2497,7 +2517,7 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
       const stillOpen=await window.checkOpenOrderStillOpen(mesaChk._sb_id).catch(()=>true);
       if(stillOpen===false){
         btn.disabled=false;btn.textContent='Cerrar y cobrar';
-        showToast('⚠ Esta mesa ya fue cerrada en otro dispositivo.');
+        showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
         mesas=mesas.filter(x=>x.id!==mesaActivaId);save();renderVentas();return;
       }
     }
@@ -4323,12 +4343,17 @@ if(config.webappUrl){loadFromSheets();}
   let ooLastRead='';
   let ooCount=0;
   let ooItemCount=0;
+  let ooHasSupabaseRead=false;
+  let ooRealtimeChannel=null;
+  let ooRealtimeStoreId='';
+  let ooRealtimeActive=false;
+  let ooRealtimeDebounce=null;
 
   // ── Debounce / cooldown ────────────────────────────
   let ooFetching=false;
   let ooLastFetch=0;
-  const OO_COOLDOWN=8000;   // mín 8s entre lecturas automáticas
-  const OO_FORCE_COOLDOWN=2000; // mín 2s para refresh manual
+  const OO_COOLDOWN=2500;   // mín 2.5s entre lecturas automáticas
+  const OO_FORCE_COOLDOWN=800; // mín 0.8s para refresh manual
 
   // ── Helpers ───────────────────────────────────────
   function ooClient(){
@@ -4349,6 +4374,31 @@ if(config.webappUrl){loadFromSheets();}
     catch{return new Date().toLocaleString();}
   }
   function ooSetState(s,err){ooState=s;ooError=err||'';ooUpdateDiag();}
+  function prepareOpenOrdersLoading(){
+    if(ooReady()&&!ooHasSupabaseRead&&ooState!=='syncing') ooSetState('syncing','');
+  }
+  function ooActiveTab(){return window.activeTab||activeTab||'carga';}
+  function ooRenderVisible(){
+    if(ooActiveTab()==='carga'){
+      if(typeof renderMesasSection==='function') renderMesasSection();
+      if(typeof renderReservasSection==='function') renderReservasSection();
+      syncActiveOpenOrderView();
+    }
+  }
+  function syncActiveOpenOrderView(){
+    try{
+      const pedidoVisible=$('view-pedido')?.style.display==='block';
+      if(!pedidoVisible||!mesaActivaId||String(mesaActivaId).startsWith('reserva_')) return;
+      const m=(mesas||[]).find(x=>String(x.id)===String(mesaActivaId));
+      if(!m) return;
+      carrito={};
+      Object.entries(m.items||{}).forEach(([k,v])=>{carrito[k]={...v};});
+      renderProdGrid();
+      renderCart();
+    }catch(err){
+      console.warn('[open_orders] active view sync failed',err);
+    }
+  }
 
   // Esperar a que Supabase esté listo (máx maxMs ms)
   async function waitForOOReady(maxMs=3000){
@@ -4400,9 +4450,10 @@ if(config.webappUrl){loadFromSheets();}
 
       if(!orders||!orders.length){
         // Supabase dice 0 mesas abiertas → limpiar local
-        window.mesas=[];
+        mesas=[];
         if(typeof window.save==='function')window.save();
-        ooState='supabase';ooError='';ooLastRead=ooStamp();ooCount=0;ooItemCount=0;ooUpdateDiag();
+        ooHasSupabaseRead=true;ooState='supabase';ooError='';ooLastRead=ooStamp();ooCount=0;ooItemCount=0;ooUpdateDiag();
+        ooRenderVisible();
         return{ok:true,count:0};
       }
 
@@ -4447,9 +4498,10 @@ if(config.webappUrl){loadFromSheets();}
         };
       });
 
-      window.mesas=newMesas;
+      mesas=newMesas;
       if(typeof window.save==='function')window.save();
-      ooState='supabase';ooError='';ooLastRead=ooStamp();ooCount=orders.length;ooItemCount=(items||[]).length;ooUpdateDiag();
+      ooHasSupabaseRead=true;ooState='supabase';ooError='';ooLastRead=ooStamp();ooCount=orders.length;ooItemCount=(items||[]).length;ooUpdateDiag();
+      ooRenderVisible();
       return{ok:true,count:orders.length};
     }catch(err){
       const msg=err?.message||String(err)||'Error desconocido';
@@ -4471,6 +4523,10 @@ if(config.webappUrl){loadFromSheets();}
 
   // ── Create: mesa nueva → open_orders ──────────────
   async function createOpenOrderInSupabase(mesa){
+    if(!ooReady()){
+      const ready=await waitForOOReady(4000);
+      if(!ready)return null;
+    }
     const client=ooClient(),storeId=ooStoreId();
     if(!client||!storeId)return null;
     const turnoActivo=window.turno&&window.turno.abierto?window.turno:null;
@@ -4516,22 +4572,32 @@ if(config.webappUrl){loadFromSheets();}
       await client.from('open_order_items').delete().eq('open_order_id',sbOrderId).eq('store_id',storeId);
       const rows=Object.values(items||{}).map((item,i)=>{
         const p=typeof window.findProductById==='function'?window.findProductById(item.prodId):null;
+        const varsTotal=(item.vars||[]).reduce((sum,v)=>sum+(Number(v.precio)||0),0);
+        const unitPrice=Number(item.precio)||0;
+        const qty=Number(item.qty)||1;
+        const lineTotal=(unitPrice+varsTotal)*qty;
         return{
           store_id:storeId,
           open_order_id:sbOrderId,
           product_id:p?._sb_id||null,
           product_legacy_id:String(item.prodId||''),
           product_name:p?.name||item.prodId||'?',
-          quantity:item.qty||1,
-          unit_price:item.precio||0,
+          quantity:qty,
+          unit_price:unitPrice,
+          line_total:lineTotal,
           variants:item.vars||[],
           note:item.nota||'',
           sort_order:i,
-          metadata:{}
+          metadata:{line_total:lineTotal}
         };
       });
       if(rows.length){
-        const{error}=await client.from('open_order_items').insert(rows);
+        let {error}=await client.from('open_order_items').insert(rows);
+        if(error && String(error.message||'').toLowerCase().includes('line_total')){
+          const fallbackRows=rows.map(({line_total,...row})=>row);
+          const fallback=await client.from('open_order_items').insert(fallbackRows);
+          error=fallback.error;
+        }
         if(error)throw error;
       }
       return true;
@@ -4543,7 +4609,10 @@ if(config.webappUrl){loadFromSheets();}
 
   // ── Full sync de una mesa (create if needed + items) ─
   async function syncMesaToSupabase(mesa){
-    if(!ooReady())return;
+    if(!ooReady()){
+      const ready=await waitForOOReady(4000);
+      if(!ready)return false;
+    }
     const storeId=ooStoreId();
     // Crear open_order si no tiene _sb_id
     if(!mesa._sb_id){
@@ -4551,14 +4620,15 @@ if(config.webappUrl){loadFromSheets();}
       if(sbId){
         mesa._sb_id=sbId;
         // Persistir _sb_id en el array global
-        const arr=window.mesas||[];
+        const arr=mesas||[];
         const idx=arr.findIndex(m=>m.id===mesa.id);
         if(idx>=0)arr[idx]._sb_id=sbId;
         if(typeof window.save==='function')window.save();
       }
     }
-    if(!mesa._sb_id)return;
-    await syncOpenOrderItems(mesa._sb_id,mesa.items||{},storeId);
+    if(!mesa._sb_id)return false;
+    const ok=await syncOpenOrderItems(mesa._sb_id,mesa.items||{},storeId);
+    return ok;
   }
 
   // ── Delete: mesa cobrada/eliminada ────────────────
@@ -4609,7 +4679,9 @@ if(config.webappUrl){loadFromSheets();}
     const storeOk=!!ooStoreId();
     el.innerHTML=`<div><strong>Fuente:</strong> ${label}</div>`
       +`<div><strong>Cliente Supabase:</strong> ${clientOk?'✅ listo':'❌ no disponible'}</div>`
+      +`<div><strong>Sesión activa:</strong> ${clientOk?'✅ sí':'❌ no'}</div>`
       +`<div><strong>Store ID:</strong> ${ooStoreId()||'❌ no detectado'}</div>`
+      +`<div><strong>Realtime:</strong> ${ooRealtimeActive?'✅ activo':'❌ inactivo'}</div>`
       +`<div><strong>open_orders:</strong> ${ooCount} &nbsp;|&nbsp; <strong>items:</strong> ${ooItemCount}</div>`
       +(ooLastRead?`<div><strong>Última lectura:</strong> ${ooLastRead}</div>`:'')
       +(ooError?`<div style="color:var(--red)"><strong>Último error:</strong> ${ooError}</div>`:'');
@@ -4619,14 +4691,58 @@ if(config.webappUrl){loadFromSheets();}
   // Llama a loadOpenOrdersFromSupabase y re-renderiza si hubo cambios.
   // ctx: contexto de llamada ('tab'|'focus'|'interval'|'post_action') — solo para debug
   async function triggerOORefresh(ctx){
-    const r=await loadOpenOrdersFromSupabase({force:ctx==='post_action',silent:true});
+    startOORealtime();
+    const force=['post_action','realtime','focus','tab','online'].includes(ctx);
+    const r=await loadOpenOrdersFromSupabase({force,silent:true});
     if(r?.ok){
-      if(typeof window.renderMesasSection==='function') window.renderMesasSection();
-      if(typeof window.renderReservasSection==='function') window.renderReservasSection();
+      ooRenderVisible();
+    }
+    if(ooActiveTab()==='carga'&&typeof window.reloadCustomersReservationsFromSupabase==='function'){
+      window.reloadCustomersReservationsFromSupabase(true).then(()=>renderReservasSection()).catch(()=>{});
     }
     // En modo técnico: actualizar diagnóstico siempre
     ooUpdateDiag();
     return r;
+  }
+
+  function scheduleOORealtimeRefresh(){
+    clearTimeout(ooRealtimeDebounce);
+    ooRealtimeDebounce=setTimeout(()=>triggerOORefresh('realtime'),350);
+  }
+  function stopOORealtime(){
+    const client=ooClient();
+    if(ooRealtimeChannel&&client?.removeChannel){
+      client.removeChannel(ooRealtimeChannel).catch?.(()=>{});
+    }
+    ooRealtimeChannel=null;
+    ooRealtimeStoreId='';
+    ooRealtimeActive=false;
+    ooUpdateDiag();
+  }
+  function startOORealtime(){
+    const client=ooClient();
+    const storeId=ooStoreId();
+    if(!client?.channel||!storeId){return false;}
+    if(ooRealtimeChannel&&ooRealtimeStoreId===storeId)return true;
+    stopOORealtime();
+    try{
+      ooRealtimeStoreId=storeId;
+      ooRealtimeChannel=client
+        .channel(`open-orders-${storeId}`)
+        .on('postgres_changes',{event:'*',schema:'public',table:'open_orders',filter:`store_id=eq.${storeId}`},scheduleOORealtimeRefresh)
+        .on('postgres_changes',{event:'*',schema:'public',table:'open_order_items',filter:`store_id=eq.${storeId}`},scheduleOORealtimeRefresh)
+        .subscribe(status=>{
+          ooRealtimeActive=status==='SUBSCRIBED';
+          ooUpdateDiag();
+          if(status==='SUBSCRIBED') triggerOORefresh('realtime');
+        });
+      return true;
+    }catch(err){
+      ooRealtimeActive=false;
+      console.warn('[open_orders] realtime unavailable',err);
+      ooUpdateDiag();
+      return false;
+    }
   }
 
   // ── Auto-refresh por intervalo (20s mientras Caja activo) ─
@@ -4634,10 +4750,10 @@ if(config.webappUrl){loadFromSheets();}
   function startOOInterval(){
     if(ooIntervalId)return;
     ooIntervalId=setInterval(()=>{
-      if(window.activeTab==='carga'&&document.visibilityState==='visible'){
+      if(ooActiveTab()==='carga'&&document.visibilityState==='visible'){
         triggerOORefresh('interval');
       }
-    },20000);
+    },12000);
   }
   // Arrancar inmediatamente (el intervalo se auto-controla por activeTab)
   startOOInterval();
@@ -4649,13 +4765,54 @@ if(config.webappUrl){loadFromSheets();}
   window.checkOpenOrderStillOpen=checkOpenOrderStillOpen;
   window.updateOODiag=ooUpdateDiag;
   window.triggerOORefresh=triggerOORefresh;
+  window.prepareOpenOrdersLoading=prepareOpenOrdersLoading;
+  window.startOpenOrdersRealtime=startOORealtime;
+  window.stopOpenOrdersRealtime=stopOORealtime;
+  window.getOpenOrdersSyncState=function(){
+    return{
+      state:ooState,
+      error:ooError,
+      lastRead:ooLastRead,
+      openOrders:ooCount,
+      openOrderItems:ooItemCount,
+      storeId:ooStoreId(),
+      sessionActive:!!ooClient()?.auth,
+      realtimeActive:ooRealtimeActive,
+      hasSupabaseRead:ooHasSupabaseRead,
+      ready:ooReady()
+    };
+  };
 
   // ── Visibilitychange: sincronizar al volver al foco ─
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'&&window.activeTab==='carga'){
+    if(document.visibilityState==='visible'&&ooActiveTab()==='carga'){
       triggerOORefresh('focus');
     }
   });
+  window.addEventListener('focus',()=>{
+    if(ooActiveTab()==='carga') triggerOORefresh('focus');
+  });
+  window.addEventListener('online',()=>triggerOORefresh('online'));
+
+  const _safeInitSupabaseAccessOO=window.safeInitSupabaseAccess;
+  if(typeof _safeInitSupabaseAccessOO==='function'){
+    window.safeInitSupabaseAccess=async function(...args){
+      const result=await _safeInitSupabaseAccessOO.apply(this,args);
+      startOORealtime();
+      triggerOORefresh('init');
+      return result;
+    };
+  }
+  const _onSupabaseStoreChangeOO=window.onSupabaseStoreChange;
+  if(typeof _onSupabaseStoreChangeOO==='function'){
+    window.onSupabaseStoreChange=function(...args){
+      const result=_onSupabaseStoreChangeOO.apply(this,args);
+      ooHasSupabaseRead=false;
+      stopOORealtime();
+      setTimeout(()=>triggerOORefresh('tab'),0);
+      return result;
+    };
+  }
 })();
 </script>
 
