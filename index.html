@@ -1523,6 +1523,21 @@ const fmt=n=>'$'+Math.round(n).toLocaleString('es-AR');
 const fmtK=n=>n>=1000000?'$'+(n/1000000).toFixed(1).replace('.0','')+'M':n>=1000?'$'+Math.round(n/1000)+'k':fmt(n);
 function pad2(n){return String(n).padStart(2,'0');}
 function sameId(a,b){return String(a)===String(b);}
+function getMesaOpenOrderId(m){return m?._sb_id||m?.open_order_id||m?.id||'';}
+function findMesaByAnyId(id){
+  const sid=String(id||'');
+  if(!sid)return null;
+  return (mesas||[]).find(m=>[m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>String(v||'')===sid))||null;
+}
+function removeMesaByAnyId(id){
+  const sid=String(id||'');
+  mesas=(mesas||[]).filter(m=>![m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>String(v||'')===sid));
+}
+function isMesaDetalleVisible(){return $('view-pedido')?.style.display==='block';}
+function setCajaNavEvent(eventName){
+  window.__cajaLastNavEvent={event:eventName,at:new Date().toISOString(),selectedOpenOrderId:mesaActivaId||''};
+  window.updateOODiag?.();
+}
 function normalizeLegacyFrontId(v){
   if(v===null||v===undefined)return v;
   const s=String(v);
@@ -1600,7 +1615,7 @@ function parsePaymentAmount(value){
 function getDraftMixedPayments(){return PAYMENT_METHODS.map(m=>({metodo:m.key,monto:parsePaymentAmount(mixedPayments[m.key])})).filter(p=>p.monto>0);}
 function getCurrentVentaTarget(){
   if(!mesaActivaId)return null;
-  return mesaActivaId.startsWith('reserva_')?reservas.find(x=>x.id===mesaActivaId.replace('reserva_','')):mesas.find(x=>x.id===mesaActivaId);
+  return mesaActivaId.startsWith('reserva_')?reservas.find(x=>x.id===mesaActivaId.replace('reserva_','')):findMesaByAnyId(mesaActivaId);
 }
 function persistCurrentPaymentSelection(){
   const target=getCurrentVentaTarget();
@@ -1839,6 +1854,7 @@ function escapeHtml(value){
   return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 function escapeAttr(value){return escapeHtml(value);}
+function escapeJsArg(value){return String(value??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function isSupabaseAdminRole(){
   const role=String(window.getSupabaseActiveRole?.()||window.getActiveStoreRole?.()||'').toLowerCase();
   return role==='owner'||role==='admin';
@@ -2321,6 +2337,7 @@ function renderGastos(){
 function renderVentas(){
   $('view-mesas').style.display='block';$('view-pedido').style.display='none';
   mesaActivaId=null;carrito={};
+  setCajaNavEvent('list');
   renderStockAlerts();renderSetupBanner();
   window.prepareOpenOrdersLoading?.();
   renderVentasFiltroChips();renderMesasSection();renderReservasSection();
@@ -2368,12 +2385,13 @@ function renderMesasSection(){
     const items=Object.values(m.items||{}).reduce((s,v)=>s+(v.qty||0),0);
     const total=Object.values(m.items||{}).reduce((s,v)=>s+carritoItemTotal(v),0);
     const syncing=m._syncing||(!m._sb_id&&ooSync?.ready);
-    return `<div class="mesa-card ${items>0?'con-items':'sin-items'}" onclick="abrirMesa('${m.id}')">
+    const openId=getMesaOpenOrderId(m);
+    return `<div class="mesa-card ${items>0?'con-items':'sin-items'}" onclick="abrirMesa('${escapeJsArg(openId)}')">
       <span class="mesa-tipo-badge ${tipoBadgeClass(m.tipo||'salon')}">${tipoLabel(m.tipo||'salon')}</span>
       <div class="mesa-nombre">${m.nombre}</div>
       <div class="mesa-items">${items} ítem${items!==1?'s':''}${syncing?' · guardando…':''}</div>
       <div class="mesa-total">${items>0?fmt(total):'—'}</div>
-      <div class="mesa-close" onclick="event.stopPropagation();pedirEliminarMesa('${m.id}')">×</div>
+      <div class="mesa-close" onclick="event.stopPropagation();pedirEliminarMesa('${escapeJsArg(openId)}')">×</div>
     </div>`;
   }).join('')}</div>`;
 }
@@ -2415,7 +2433,8 @@ function cerrarModalNuevaMesa(){$('modal-nueva-mesa').classList.remove('open');}
 function closeModalNuevaMesa(e){if(e.target===$('modal-nueva-mesa'))cerrarModalNuevaMesa();}
 async function confirmarNuevaMesa(){
   const nombre=$('nueva-mesa-input').value.trim();if(!nombre){showToast('Ingresá un nombre');return;}
-  const m={id:'m_'+Date.now(),nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null,_syncing:true};
+  const localId='m_'+Date.now();
+  const m={id:localId,legacy_local_id:localId,nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null,open_order_id:null,status:'open',_syncing:true};
   window.markOpenOrderLocalCreate?.(m.id);
   mesas.push(m);save();syncMesasSheets();cerrarModalNuevaMesa();
   renderMesasSection();
@@ -2433,17 +2452,31 @@ document.addEventListener('DOMContentLoaded',()=>{
   const el=$('nueva-mesa-input');if(el)el.addEventListener('keydown',e=>{if(e.key==='Enter')confirmarNuevaMesa();});
 });
 function pedirEliminarMesa(id){
-  const m=mesas.find(x=>x.id===id);if(!m)return;
+  const m=findMesaByAnyId(id);if(!m)return;
   pedirConfirm(`¿Eliminar "${m.nombre}"? Se perderán los ítems.`,()=>{
     const sbId=m._sb_id||null;
-    mesas=mesas.filter(x=>x.id!==id);save();syncMesasSheets();
+    removeMesaByAnyId(id);save();syncMesasSheets();
     if(sbId)window.deleteOpenOrderFromSupabase?.(sbId).catch(()=>{});
     renderVentas();showToast('Mesa eliminada');
   });
 }
-function abrirMesa(id){
-  const m=mesas.find(x=>x.id===id);if(!m)return;
-  mesaActivaId=id;carrito={};
+async function abrirMesa(id){
+  let m=findMesaByAnyId(id);
+  if(!m&&window.loadSingleOpenOrderFromSupabase){
+    m=await window.loadSingleOpenOrderFromSupabase(id).catch(()=>null);
+  }
+  if(!m){showToast('No pudimos cargar esta mesa. Reintentá.');return;}
+  const openId=getMesaOpenOrderId(m);
+  if(m._sb_id&&window.checkOpenOrderStillOpen){
+    const stillOpen=await window.checkOpenOrderStillOpen(m._sb_id).catch(()=>true);
+    if(stillOpen===false){
+      removeMesaByAnyId(openId);save();renderMesasSection();
+      showToast('Esta mesa ya fue cerrada o no está disponible.');
+      return;
+    }
+  }
+  mesaActivaId=openId;carrito={};
+  setCajaNavEvent('open_detail');
   Object.entries(m.items||{}).forEach(([k,v])=>{carrito[k]={...v};});
   $('mesa-titulo').textContent=m.nombre;
   const badge=$('mesa-tipo-badge');badge.textContent=tipoLabel(m.tipo||'salon');badge.className=`mesa-tipo-badge ${tipoBadgeClass(m.tipo||'salon')}`;
@@ -2454,6 +2487,7 @@ function abrirMesa(id){
 function abrirReservaComoVenta(id){
   const r=reservas.find(x=>x.id===id);if(!r)return;
   mesaActivaId='reserva_'+id;carrito={};
+  setCajaNavEvent('open_reservation');
   (r.items||[]).forEach((item,i)=>{carrito[`res_${i}`]={...item};});
   $('mesa-titulo').textContent=r.nombre;
   const badge=$('mesa-tipo-badge');badge.textContent=tipoLabel(r.tipo||'salon');badge.className=`mesa-tipo-badge ${tipoBadgeClass(r.tipo||'salon')}`;
@@ -2463,7 +2497,7 @@ function abrirReservaComoVenta(id){
 }
 async function volverAMesas(){
   if(mesaActivaId&&!mesaActivaId.startsWith('reserva_')){
-    const m=mesas.find(x=>x.id===mesaActivaId);if(m){
+    const m=findMesaByAnyId(mesaActivaId);if(m){
       m.items={...carrito};m.pago=pago;m.payment_mode=paymentMode;m.pagos=paymentMode==='mixed'?getDraftMixedPayments():[];
       m._syncing=!!window.getOpenOrdersSyncState?.()?.ready;
       save();syncMesasSheets();
@@ -2477,12 +2511,16 @@ async function volverAMesas(){
 }
 function saveMesaCarrito(){
   if(!mesaActivaId||mesaActivaId.startsWith('reserva_'))return;
-  const m=mesas.find(x=>x.id===mesaActivaId);
+  const m=findMesaByAnyId(mesaActivaId);
   if(m){
-    m.items={...carrito};save();syncMesasSheets();
+    m.items={...carrito};m._syncing=!!window.getOpenOrdersSyncState?.()?.ready;save();syncMesasSheets();
     window.syncMesaToSupabase?.(m)
-      .then(ok=>{ if(ok) setTimeout(()=>window.triggerOORefresh?.('post_action'),300); })
-      .catch(()=>{});
+      .then(ok=>{
+        m._syncing=!ok;save();
+        if(ok) setTimeout(()=>window.triggerOORefresh?.('post_action'),300);
+        else if(window.getOpenOrdersSyncState?.()?.ready) showToast('No pudimos actualizar esta mesa. Reintentá.');
+      })
+      .catch(()=>{m._syncing=true;save();showToast('No pudimos actualizar esta mesa. Reintentá.');});
   }
 }
 
@@ -2530,13 +2568,18 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
   const btn=$('btn-confirm');btn.disabled=true;btn.textContent='Cerrando…';
   // ── Anti-double-cobro: verificar que la mesa siga abierta en Supabase ──
   if(!esReserva&&window.checkOpenOrderStillOpen){
-    const mesaChk=mesas.find(x=>x.id===mesaActivaId);
+    const mesaChk=findMesaByAnyId(mesaActivaId);
+    if(!mesaChk){
+      btn.disabled=false;btn.textContent='Cerrar y cobrar';
+      showToast('No pudimos cargar esta mesa. Reintentá.');
+      return;
+    }
     if(mesaChk?._sb_id){
       const stillOpen=await window.checkOpenOrderStillOpen(mesaChk._sb_id).catch(()=>true);
       if(stillOpen===false){
         btn.disabled=false;btn.textContent='Cerrar y cobrar';
         showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
-        mesas=mesas.filter(x=>x.id!==mesaActivaId);save();renderVentas();return;
+        removeMesaByAnyId(mesaActivaId);save();renderVentas();return;
       }
     }
   }
@@ -2553,8 +2596,8 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
   let tipoVenta='salon',nombreMesa='';
   let reservaActiva=null,clienteReserva=null;
   if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){reservaActiva=r;tipoVenta=r.tipo||'salon';nombreMesa=r.nombre;clienteReserva=customers.find(c=>String(c.id||'')===String(r.clienteId||''))||null;}}
-  else{const m=mesas.find(x=>x.id===mesaActivaId);if(m){tipoVenta=m.tipo||'salon';nombreMesa=m.nombre;}}
-  const _openOrderSbId=!esReserva?(mesas.find(x=>x.id===mesaActivaId)?._sb_id||null):null;
+  else{const m=findMesaByAnyId(mesaActivaId);if(m){tipoVenta=m.tipo||'salon';nombreMesa=m.nombre;}}
+  const _openOrderSbId=!esReserva?(findMesaByAnyId(mesaActivaId)?._sb_id||null):null;
   const nuevas=items.map(item=>{
      const p=findProductById(item.prodId);
      const varsExtra=(item.vars||[]).reduce((s,v)=>s+v.precio,0);
@@ -2580,8 +2623,8 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
   if(turnoActivo)turnoActivo.ventasIds=[...(turnoActivo.ventasIds||[]),...ventaIds];
   if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){r.estado='pagada';r.pago=paymentState.pago;r.payment_mode=paymentState.payment_mode;r.pagos=paymentState.pagos;}}
   else{
-    const mesaCobrada=mesas.find(x=>x.id===mesaActivaId);
-    mesas=mesas.filter(x=>x.id!==mesaActivaId);
+    const mesaCobrada=findMesaByAnyId(mesaActivaId);
+    removeMesaByAnyId(mesaActivaId);
     if(mesaCobrada?._sb_id)window.deleteOpenOrderFromSupabase?.(mesaCobrada._sb_id).catch(()=>{});
   }
   save();if(esReserva)syncReservasSheets();else syncMesasSheets();if(turnoActivo&&turno===turnoActivo)syncTurnoSheets();
@@ -4459,10 +4502,11 @@ if(config.webappUrl){loadFromSheets();}
     if(ooReady()&&!ooHasSupabaseRead&&!ooLocalMesaCount()&&ooState!=='syncing') ooSetState('syncing','');
   }
   function ooActiveTab(){return window.activeTab||activeTab||'carga';}
+  function ooDetailVisible(){return typeof isMesaDetalleVisible==='function'&&isMesaDetalleVisible();}
   function ooRenderVisible(){
     if(ooActiveTab()==='carga'){
       if(typeof renderMesasSection==='function') renderMesasSection();
-      if(typeof renderReservasSection==='function') renderReservasSection();
+      if(!ooDetailVisible()&&typeof renderReservasSection==='function') renderReservasSection();
       syncActiveOpenOrderView();
     }
   }
@@ -4470,8 +4514,16 @@ if(config.webappUrl){loadFromSheets();}
     try{
       const pedidoVisible=$('view-pedido')?.style.display==='block';
       if(!pedidoVisible||!mesaActivaId||String(mesaActivaId).startsWith('reserva_')) return;
-      const m=(mesas||[]).find(x=>String(x.id)===String(mesaActivaId));
-      if(!m) return;
+      const m=(typeof findMesaByAnyId==='function')?findMesaByAnyId(mesaActivaId):(mesas||[]).find(x=>String(x.id)===String(mesaActivaId));
+      if(!m){
+        if(ooState==='supabase'&&ooHasSupabaseRead){
+          showToast?.('Esta mesa ya fue cerrada desde otro dispositivo.');
+          mesaActivaId=null;carrito={};
+          if(typeof renderVentas==='function') renderVentas();
+        }
+        return;
+      }
+      mesaActivaId=m._sb_id||m.open_order_id||m.id||mesaActivaId;
       carrito={};
       Object.entries(m.items||{}).forEach(([k,v])=>{carrito[k]={...v};});
       renderProdGrid();
@@ -4593,12 +4645,19 @@ if(config.webappUrl){loadFromSheets();}
         };
       });
 
-      const newMesas=orders.map(o=>{
+      const activeBefore=(typeof findMesaByAnyId==='function'&&mesaActivaId)?findMesaByAnyId(mesaActivaId):null;
+      const keepActiveDraft=!!(activeBefore?._syncing&&typeof isMesaDetalleVisible==='function'&&isMesaDetalleVisible());
+      let newMesas=orders.map(o=>{
         // Los campos extra los buscamos en metadata como fallback (compatibilidad de schema)
         const meta=o.metadata||{};
         return{
-          id:meta.legacy_local_id||`m_sb_${o.id}`,
+          id:o.id,
           _sb_id:o.id,
+          open_order_id:o.id,
+          legacy_local_id:meta.legacy_local_id||'',
+          status:'open',
+          store_id:o.store_id||storeId,
+          shift_id:o.shift_id||null,
           nombre:o.table_label||meta.table_label||'Mesa',
           tipo:o.service_type||meta.service_type||'salon',
           items:byOrder[o.id]||{},
@@ -4609,6 +4668,15 @@ if(config.webappUrl){loadFromSheets();}
           operator_name:o.operator_name||meta.operator_name||''
         };
       });
+      if(keepActiveDraft){
+        const activeKeys=[activeBefore.id,activeBefore._sb_id,activeBefore.open_order_id,activeBefore.legacy_local_id].map(v=>String(v||'')).filter(Boolean);
+        const idx=newMesas.findIndex(m=>[m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>activeKeys.includes(String(v||''))));
+        if(idx>=0){
+          newMesas[idx]={...newMesas[idx],...activeBefore,id:newMesas[idx].id,_sb_id:newMesas[idx]._sb_id,open_order_id:newMesas[idx].open_order_id,_syncing:true};
+        }else{
+          newMesas.push(activeBefore);
+        }
+      }
 
       mesas=newMesas;
       if(typeof window.save==='function')window.save();
@@ -4638,6 +4706,66 @@ if(config.webappUrl){loadFromSheets();}
     }
   }
 
+  async function loadSingleOpenOrderFromSupabase(id){
+    if(!ooReady()){
+      const ready=await waitForOOReady(3000);
+      if(!ready)return null;
+    }
+    const client=ooClient(),storeId=ooStoreId(),sid=String(id||'');
+    if(!client||!storeId||!sid)return null;
+    try{
+      const orderSelect='id,store_id,shift_id,operator_name,operator_id,service_type,table_label,metadata,created_at,status';
+      let {data:order,error}=await client
+        .from('open_orders')
+        .select(orderSelect)
+        .eq('store_id',storeId)
+        .eq('id',sid)
+        .maybeSingle();
+      if(error)throw error;
+      if(!order){
+        const byLegacy=await client
+          .from('open_orders')
+          .select(orderSelect)
+          .eq('store_id',storeId)
+          .eq('status','open')
+          .contains('metadata',{legacy_local_id:sid})
+          .maybeSingle();
+        if(byLegacy.error)throw byLegacy.error;
+        order=byLegacy.data||null;
+      }
+      if(!order||order.status!=='open')return null;
+      const {data:items,error:itemsErr}=await client
+        .from('open_order_items')
+        .select('id,open_order_id,product_id,product_legacy_id,product_name,quantity,unit_price,variants,note,sort_order,metadata')
+        .eq('store_id',storeId)
+        .eq('open_order_id',order.id);
+      if(itemsErr)throw itemsErr;
+      const itemMap={};
+      (items||[]).forEach(item=>{
+        const hasVars=((item.variants)||[]).length>0;
+        const key=hasVars?`sb_item_${item.id}`:`${item.product_legacy_id||item.product_id||'_'}_plain`;
+        itemMap[key]={prodId:item.product_legacy_id||item.product_id||'',qty:item.quantity||1,vars:item.variants||[],nota:item.note||'',precio:item.unit_price||0,_sb_item_id:item.id};
+      });
+      const meta=order.metadata||{};
+      const mesa={
+        id:order.id,_sb_id:order.id,open_order_id:order.id,legacy_local_id:meta.legacy_local_id||'',
+        status:'open',store_id:order.store_id||storeId,shift_id:order.shift_id||null,
+        nombre:order.table_label||meta.table_label||'Mesa',tipo:order.service_type||meta.service_type||'salon',
+        items:itemMap,pago:meta.pago||'ef',payment_mode:meta.payment_mode||'single',pagos:meta.pagos||[],
+        apertura:meta.apertura||order.created_at||'',operator_name:order.operator_name||meta.operator_name||''
+      };
+      const idx=(mesas||[]).findIndex(m=>[m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>String(v||'')===sid||String(v||'')===String(order.id)));
+      if(idx>=0)mesas[idx]=mesa;else mesas.push(mesa);
+      if(typeof window.save==='function')window.save();
+      ooState='supabase';ooError='';ooLastRead=ooStamp();ooUpdateDiag();
+      return mesa;
+    }catch(err){
+      ooSetState('error',err?.message||String(err));
+      ooUpdateDiag();
+      return null;
+    }
+  }
+
   // ── Create: mesa nueva → open_orders ──────────────
   async function createOpenOrderInSupabase(mesa){
     if(!ooReady()){
@@ -4664,7 +4792,7 @@ if(config.webappUrl){loadFromSheets();}
             payment_mode:mesa.payment_mode||'single',
             pagos:mesa.pagos||[],
             apertura:mesa.apertura||new Date().toISOString(),
-            legacy_local_id:mesa.id,
+            legacy_local_id:mesa.legacy_local_id||mesa.id,
             table_label:mesa.nombre||'Mesa',
             service_type:mesa.tipo||'salon',
             operator_name:turnoActivo?.operador||null
@@ -4731,23 +4859,28 @@ if(config.webappUrl){loadFromSheets();}
       if(!ready)return false;
     }
     const storeId=ooStoreId();
+    const previousId=mesa.legacy_local_id||mesa.id;
     // Crear open_order si no tiene _sb_id
     if(!mesa._sb_id){
       const sbId=await createOpenOrderInSupabase(mesa);
       if(sbId){
+        mesa.legacy_local_id=previousId;
+        mesa.id=sbId;
         mesa._sb_id=sbId;
+        mesa.open_order_id=sbId;
+        mesa.status='open';
         mesa._syncing=false;
         // Persistir _sb_id en el array global
         const arr=mesas||[];
-        const idx=arr.findIndex(m=>m.id===mesa.id);
-        if(idx>=0){arr[idx]._sb_id=sbId;arr[idx]._syncing=false;}
+        const idx=arr.findIndex(m=>[m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>String(v||'')===String(previousId)||String(v||'')===String(sbId)));
+        if(idx>=0){arr[idx]={...arr[idx],id:sbId,_sb_id:sbId,open_order_id:sbId,legacy_local_id:previousId,status:'open',_syncing:false};}
         if(typeof window.save==='function')window.save();
       }
     }
     if(!mesa._sb_id)return false;
     const ok=await syncOpenOrderItems(mesa._sb_id,mesa.items||{},storeId);
     mesa._syncing=!ok;
-    const idx=(mesas||[]).findIndex(m=>m.id===mesa.id);
+    const idx=(mesas||[]).findIndex(m=>[m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>String(v||'')===String(mesa.id)||String(v||'')===String(mesa._sb_id)||String(v||'')===String(previousId)));
     if(idx>=0)mesas[idx]._syncing=!ok;
     if(typeof window.save==='function')window.save();
     return ok;
@@ -4803,6 +4936,8 @@ if(config.webappUrl){loadFromSheets();}
       +`<div><strong>Cliente Supabase:</strong> ${clientOk?'✅ listo':'❌ no disponible'}</div>`
       +`<div><strong>Sesión activa:</strong> ${clientOk?'✅ sí':'❌ no'}</div>`
       +`<div><strong>Store ID:</strong> ${ooStoreId()||'❌ no detectado'}</div>`
+      +`<div><strong>Mesa activa:</strong> ${window.__cajaLastNavEvent?.selectedOpenOrderId||mesaActivaId||'—'}</div>`
+      +`<div><strong>Última navegación Caja:</strong> ${window.__cajaLastNavEvent?.event||'—'}${window.__cajaLastNavEvent?.at?' · '+window.__cajaLastNavEvent.at:''}</div>`
       +`<div><strong>Realtime:</strong> ${ooRealtimeActive?'✅ activo':'❌ inactivo'}</div>`
       +`<div><strong>open_orders:</strong> ${ooCount} &nbsp;|&nbsp; <strong>items:</strong> ${ooItemCount}</div>`
       +(ooLastRead?`<div><strong>Última lectura:</strong> ${ooLastRead}</div>`:'')
@@ -4818,7 +4953,7 @@ if(config.webappUrl){loadFromSheets();}
     const silent=!['post_action','manual'].includes(ctx);
     const r=await loadOpenOrdersFromSupabase({force,silent});
     ooRenderVisible();
-    if(ooActiveTab()==='carga'&&typeof window.reloadCustomersReservationsFromSupabase==='function'){
+    if(ooActiveTab()==='carga'&&!ooDetailVisible()&&typeof window.reloadCustomersReservationsFromSupabase==='function'){
       window.reloadCustomersReservationsFromSupabase(true).then(()=>renderReservasSection()).catch(()=>{});
     }
     // En modo técnico: actualizar diagnóstico siempre
@@ -4881,6 +5016,7 @@ if(config.webappUrl){loadFromSheets();}
 
   // ── Exponer globalmente ────────────────────────────
   window.loadOpenOrdersFromSupabase=loadOpenOrdersFromSupabase;
+  window.loadSingleOpenOrderFromSupabase=loadSingleOpenOrderFromSupabase;
   window.syncMesaToSupabase=syncMesaToSupabase;
   window.deleteOpenOrderFromSupabase=deleteOpenOrderFromSupabase;
   window.checkOpenOrderStillOpen=checkOpenOrderStillOpen;
@@ -6383,7 +6519,7 @@ if(config.webappUrl){loadFromSheets();}
   }
   function refreshCrUi(){
     try{renderClientesTab();}catch(_){}
-    try{renderVentas();}catch(_){}
+    try{isMesaDetalleVisible()?renderReservasSection():renderVentas();}catch(_){}
     try{popularClienteSelectReserva();}catch(_){}
     try{renderAjustes();}catch(_){}
   }
@@ -6449,7 +6585,8 @@ if(config.webappUrl){loadFromSheets();}
       crWarnings=[];
       reservas=[...reservationRows].map(r=>mapReservationFromSupabase(r,customerRows)).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
       save();
-      renderVentas();
+      if(isMesaDetalleVisible()) renderReservasSection();
+      else renderVentas();
       renderCrSupabaseUi();
       return true;
     }catch(err){
