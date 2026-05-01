@@ -4764,7 +4764,7 @@ if(config.webappUrl){loadFromSheets();}
     try{
       // SELECT con columnas que existen en cualquier schema estándar de open_orders
       let orders,ordersErr;
-      const extendedCols='id,store_id,shift_id,operator_name,operator_id,service_type,label,table_label,metadata,created_at';
+      const extendedCols='id,store_id,shift_id,operator_name,service_type,label,table_label,business_date,opened_at,metadata,created_at';
       ooRememberOperation('open_orders','select',`select ${extendedCols} where store_id=${storeId} and status=open`);
       ({data:orders,error:ordersErr}=await ooWithTimeout(client
         .from('open_orders')
@@ -4805,7 +4805,7 @@ if(config.webappUrl){loadFromSheets();}
       ooRememberOperation('open_order_items','select',`select items where store_id=${storeId} and open_order_id in (${orderIds.length} ids)`);
       const{data:items,error:itemsErr}=await ooWithTimeout(client
         .from('open_order_items')
-        .select('id,open_order_id,product_id,product_legacy_id,product_name,quantity,unit_price,variants,note,sort_order,metadata')
+        .select('id,open_order_id,product_id,product_name,quantity,unit_price,variants,note,sort_order,metadata')
         .eq('store_id',storeId)
         .in('open_order_id',orderIds),'open_order_items');
       if(itemsErr)throw itemsErr;
@@ -4815,9 +4815,11 @@ if(config.webappUrl){loadFromSheets();}
       (items||[]).forEach(item=>{
         if(!byOrder[item.open_order_id])byOrder[item.open_order_id]={};
         const hasVars=((item.variants)||[]).length>0;
-        const key=hasVars?`sb_item_${item.id}`:`${item.product_legacy_id||item.product_id||'_'}_plain`;
+        const itemMeta=item.metadata||{};
+        const productRef=itemMeta.product_legacy_id||itemMeta.prodId||item.product_id||'';
+        const key=hasVars?`sb_item_${item.id}`:`${productRef||'_'}_plain`;
         byOrder[item.open_order_id][key]={
-          prodId:item.product_legacy_id||item.product_id||'',
+          prodId:productRef,
           qty:item.quantity||1,
           vars:item.variants||[],
           nota:item.note||'',
@@ -4845,7 +4847,7 @@ if(config.webappUrl){loadFromSheets();}
           pago:meta.pago||'ef',
           payment_mode:meta.payment_mode||'single',
           pagos:meta.pagos||[],
-          apertura:meta.apertura||o.created_at||'',
+          apertura:meta.apertura||o.opened_at||o.created_at||'',
           operator_name:o.operator_name||meta.operator_name||''
         };
       });
@@ -4896,7 +4898,7 @@ if(config.webappUrl){loadFromSheets();}
     const client=ooClient(),storeId=ooStoreId(),sid=String(id||'');
     if(!client||!storeId||!sid)return null;
     try{
-      const orderSelect='id,store_id,shift_id,operator_name,operator_id,service_type,label,table_label,metadata,created_at,status';
+      const orderSelect='id,store_id,shift_id,operator_name,service_type,label,table_label,business_date,opened_at,metadata,created_at,status';
       ooRememberOperation('open_orders','select_single',`select ${orderSelect} where store_id=${storeId} and id=${sid}`);
       let {data:order,error}=await ooWithTimeout(client
         .from('open_orders')
@@ -4921,15 +4923,17 @@ if(config.webappUrl){loadFromSheets();}
       ooRememberOperation('open_order_items','select_single_items',`select items where store_id=${storeId} and open_order_id=${order.id}`);
       const {data:items,error:itemsErr}=await ooWithTimeout(client
         .from('open_order_items')
-        .select('id,open_order_id,product_id,product_legacy_id,product_name,quantity,unit_price,variants,note,sort_order,metadata')
+        .select('id,open_order_id,product_id,product_name,quantity,unit_price,variants,note,sort_order,metadata')
         .eq('store_id',storeId)
         .eq('open_order_id',order.id),'single_open_order_items');
       if(itemsErr)throw itemsErr;
       const itemMap={};
       (items||[]).forEach(item=>{
         const hasVars=((item.variants)||[]).length>0;
-        const key=hasVars?`sb_item_${item.id}`:`${item.product_legacy_id||item.product_id||'_'}_plain`;
-        itemMap[key]={prodId:item.product_legacy_id||item.product_id||'',qty:item.quantity||1,vars:item.variants||[],nota:item.note||'',precio:item.unit_price||0,_sb_item_id:item.id};
+        const itemMeta=item.metadata||{};
+        const productRef=itemMeta.product_legacy_id||itemMeta.prodId||item.product_id||'';
+        const key=hasVars?`sb_item_${item.id}`:`${productRef||'_'}_plain`;
+        itemMap[key]={prodId:productRef,qty:item.quantity||1,vars:item.variants||[],nota:item.note||'',precio:item.unit_price||0,_sb_item_id:item.id};
       });
       const meta=order.metadata||{};
       const mesa={
@@ -4937,7 +4941,7 @@ if(config.webappUrl){loadFromSheets();}
         status:'open',store_id:order.store_id||storeId,shift_id:order.shift_id||null,
         nombre:order.table_label||order.label||meta.table_label||meta.label||'Mesa',tipo:order.service_type||meta.service_type||'salon',
         items:itemMap,pago:meta.pago||'ef',payment_mode:meta.payment_mode||'single',pagos:meta.pagos||[],
-        apertura:meta.apertura||order.created_at||'',operator_name:order.operator_name||meta.operator_name||''
+        apertura:meta.apertura||order.opened_at||order.created_at||'',operator_name:order.operator_name||meta.operator_name||''
       };
       const idx=(mesas||[]).findIndex(m=>[m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>String(v||'')===sid||String(v||'')===String(order.id)));
       if(idx>=0)mesas[idx]=mesa;else mesas.push(mesa);
@@ -4962,26 +4966,33 @@ if(config.webappUrl){loadFromSheets();}
     if(!client||!storeId)return null;
     const turnoActivo=window.turno&&window.turno.abierto?window.turno:null;
     const mesaLabel=String(mesa.nombre||mesa.label||mesa.table_label||'Mesa').trim()||'Mesa';
+    const openedAt=mesa.apertura||getLocalTimestamp();
+    const openedDate=new Date(openedAt);
+    const businessDate=Number.isNaN(openedDate.getTime())?getLocalDateString():getLocalDateString(openedDate);
     const payload={
       store_id:storeId,
       status:'open',
+      business_date:businessDate,
+      opened_at:openedAt,
       service_type:mesa.tipo||'salon',
       label:mesaLabel,
       table_label:mesaLabel,
       shift_id:turnoActivo?._sb_id||null,
       operator_name:turnoActivo?.operador||null,
-      operator_id:turnoActivo?.operator_id||turnoActivo?.metadata?.operator_id||null,
       // Campos de app en metadata (compatibilidad de schema)
       metadata:{
         pago:mesa.pago||'ef',
         payment_mode:mesa.payment_mode||'single',
         pagos:mesa.pagos||[],
-        apertura:mesa.apertura||new Date().toISOString(),
+        apertura:openedAt,
+        opened_at:openedAt,
+        business_date:businessDate,
         legacy_local_id:mesa.legacy_local_id||mesa.id,
         label:mesaLabel,
         table_label:mesaLabel,
         service_type:mesa.tipo||'salon',
-        operator_name:turnoActivo?.operador||null
+        operator_name:turnoActivo?.operador||null,
+        operator_id:turnoActivo?.operator_id||turnoActivo?.metadata?.operator_id||null
       }
     };
     try{
@@ -5040,6 +5051,7 @@ if(config.webappUrl){loadFromSheets();}
     if(!client||!sbOrderId)return false;
     try{
       // Replace-all strategy: delete + insert
+      ooRememberOperation('open_order_items','delete_existing',`delete items where store_id=${storeId} and open_order_id=${sbOrderId}`);
       await client.from('open_order_items').delete().eq('open_order_id',sbOrderId).eq('store_id',storeId);
       const rows=Object.values(items||{}).map((item,i)=>{
         const p=typeof window.findProductById==='function'?window.findProductById(item.prodId):null;
@@ -5047,11 +5059,11 @@ if(config.webappUrl){loadFromSheets();}
         const unitPrice=Number(item.precio)||0;
         const qty=Number(item.qty)||1;
         const lineTotal=(unitPrice+varsTotal)*qty;
+        const productLegacyId=String(item.prodId||'');
         return{
           store_id:storeId,
           open_order_id:sbOrderId,
           product_id:p?._sb_id||null,
-          product_legacy_id:String(item.prodId||''),
           product_name:p?.name||item.prodId||'?',
           quantity:qty,
           unit_price:unitPrice,
@@ -5059,13 +5071,15 @@ if(config.webappUrl){loadFromSheets();}
           variants:item.vars||[],
           note:item.nota||'',
           sort_order:i,
-          metadata:{line_total:lineTotal}
+          metadata:{line_total:lineTotal,product_legacy_id:productLegacyId,prodId:productLegacyId}
         };
       });
       if(rows.length){
+        ooRememberOperation('open_order_items','insert',`insert ${rows.length} current cart items`);
         let {error}=await client.from('open_order_items').insert(rows);
         if(error && String(error.message||'').toLowerCase().includes('line_total')){
           const fallbackRows=rows.map(({line_total,...row})=>row);
+          ooRememberOperation('open_order_items','insert_without_line_total',`insert ${fallbackRows.length} current cart items`);
           const fallback=await client.from('open_order_items').insert(fallbackRows);
           error=fallback.error;
         }
@@ -5073,7 +5087,14 @@ if(config.webappUrl){loadFromSheets();}
       }
       return true;
     }catch(err){
-      console.warn('[open_orders] syncItems failed:',err);
+      ooRememberError(err,{table:'open_order_items',operation:'replace_items',query:'delete existing items + insert current cart',store_id:storeId});
+      console.warn('[open_orders] syncItems failed:',{
+        code:err?.code||'',
+        message:err?.message||String(err)||'',
+        details:err?.details||'',
+        hint:err?.hint||'',
+        payload:Object.values(items||{})
+      });
       return false;
     }
   }
