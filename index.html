@@ -1857,6 +1857,11 @@ function escapeHtml(value){
 }
 function escapeAttr(value){return escapeHtml(value);}
 function escapeJsArg(value){return String(value??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function cajaWithTimeout(promise,label,ms=12000){
+  let timer;
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`timeout:${label}`)),ms);});
+  return Promise.race([Promise.resolve(promise).finally(()=>clearTimeout(timer)),timeout]);
+}
 function isSupabaseAdminRole(){
   const role=String(window.getSupabaseActiveRole?.()||window.getActiveStoreRole?.()||'').toLowerCase();
   return role==='owner'||role==='admin';
@@ -2526,6 +2531,39 @@ function saveMesaCarrito(){
       .catch(()=>{m._syncing=true;save();showToast('No pudimos actualizar esta mesa. Reintentá.');});
   }
 }
+function findExistingReservationSaleRows(reservation){
+  if(!reservation)return[];
+  const localId=String(reservation.id||'');
+  const sbId=String(reservation._sb_id||'');
+  return (ventas||[]).filter(v=>v?._source_kind==='reserva'&&(
+    (localId&&String(v._reservation_local_id||'')===localId)||
+    (sbId&&String(v._reservation_sb_id||'')===sbId)
+  ));
+}
+async function reservationHasRemoteSale(reservation){
+  if(!reservation)return false;
+  const storeId=window.getActiveStoreId?.()||config?.activeStoreId||'';
+  const client=window.getSupabaseClient?.()||window.__coloSupabaseClient||null;
+  if(!client||!storeId)return false;
+  try{
+    const {data:session}=await cajaWithTimeout(client.auth.getSession(),'sales_session',5000);
+    if(!session?.session)return false;
+    if(window.isValidUuid?.(String(reservation._sb_id||''))){
+      const res=await cajaWithTimeout(client.from('sales').select('id').eq('store_id',storeId).eq('reservation_id',reservation._sb_id).limit(1),'reservation_sale_lookup',7000);
+      if(res.error)throw res.error;
+      if((res.data||[]).length)return true;
+    }
+    const localId=String(reservation.id||'');
+    if(localId){
+      const res=await cajaWithTimeout(client.from('sales').select('id').eq('store_id',storeId).contains('metadata',{reservation_local_id:localId}).limit(1),'reservation_sale_lookup_legacy',7000);
+      if(res.error)throw res.error;
+      if((res.data||[]).length)return true;
+    }
+  }catch(err){
+    if(window.canShowClientTechnicalUi?.())console.warn('[Caja] reservation sale duplicate check failed',err);
+  }
+  return false;
+}
 
 // ── Operador al cobrar ─────────────────────────────
 async function cerrarMesaOReserva(){
@@ -2533,14 +2571,24 @@ async function cerrarMesaOReserva(){
   if(!items.length){showToast('El pedido está vacío');return;}
   const paymentState=getCurrentPaymentState();
   if(!paymentState.valido){showToast(paymentState.mensaje||'Revisá los pagos');return;}
-  await loadOperatorsFromSupabase();
-  // Ask which operator served this table
-  const sel=$('cobro-operador-sel');if(!sel)return;
-  renderOperatorSelect(sel,true);
-  $('cobro-nuevo-op-wrap').style.display='none';
-  // Store pending data and show operator modal
-  pendingCobroCallback=()=>ejecutarCobro();
-  $('modal-operador-cobro').classList.add('open');
+  const btn=$('btn-confirm');
+  if(btn){btn.disabled=true;btn.textContent='Cargando…';}
+  try{
+    await cajaWithTimeout(loadOperatorsFromSupabase(),'load_operators_for_payment',10000).catch(err=>{
+      if(window.canShowClientTechnicalUi?.())console.warn('[Caja] load operators before payment failed',err);
+    });
+    // Ask which operator served this table
+    const sel=$('cobro-operador-sel');if(!sel)return;
+    renderOperatorSelect(sel,true);
+    $('cobro-nuevo-op-wrap').style.display='none';
+    // Store pending data and show operator modal
+    pendingCobroCallback=()=>ejecutarCobro();
+    $('modal-operador-cobro').classList.add('open');
+  }catch(err){
+    showToast('No pudimos iniciar el cobro. Reintentá.');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=mesaActivaId?.startsWith('reserva_')?'Cobrar reserva':'Cerrar y cobrar';}
+  }
 }
 function onCobroOperadorChange(){
   const sel=$('cobro-operador-sel');
@@ -2556,11 +2604,16 @@ async function confirmarOperadorCobro(){
   if(!op){showToast('Seleccioná o ingresá un operador');return;}
   if(sel?.value==='__nuevo__'&&!isSupabaseAdminRole()){showToast('No tenés permiso para crear operadores');return;}
   if(!operadores.includes(op)){operadores.push(op);save();syncOperadoresSheets();}
-  if(sel?.value==='__nuevo__'){
-    const saved=await saveOperatorToSupabase(op);
-    operatorId=saved?.id||'';
-  }else if(!operatorId){
-    operatorId=getOperatorByName(op)?.id||'';
+  try{
+    if(sel?.value==='__nuevo__'){
+      const saved=await cajaWithTimeout(saveOperatorToSupabase(op),'save_operator_for_payment',10000);
+      operatorId=saved?.id||'';
+    }else if(!operatorId){
+      operatorId=getOperatorByName(op)?.id||'';
+    }
+  }catch(err){
+    showToast('No pudimos preparar el cobro. Reintentá.');
+    return;
   }
   $('modal-operador-cobro').classList.remove('open');
   ejecutarCobro(op,operatorId);
@@ -2571,84 +2624,106 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
   const btn=$('btn-confirm');btn.disabled=true;btn.textContent='Cerrando…';
   window.__cajaCobroEnCurso=true;
   window.__cajaCobroEnCursoHasta=Date.now()+30000;
-  // ── Anti-double-cobro: verificar que la mesa siga abierta en Supabase ──
-  if(!esReserva&&window.checkOpenOrderStillOpen){
-    const mesaChk=findMesaByAnyId(mesaActivaId);
-    if(!mesaChk){
-      btn.disabled=false;btn.textContent='Cerrar y cobrar';
-      window.__cajaCobroEnCurso=false;
-      window.__cajaCobroEnCursoHasta=0;
-      showToast('No pudimos cargar esta mesa. Reintentá.');
-      return;
-    }
-    if(mesaChk?._sb_id){
-      const stillOpen=await window.checkOpenOrderStillOpen(mesaChk._sb_id).catch(()=>true);
-      if(stillOpen===false){
-        btn.disabled=false;btn.textContent='Cerrar y cobrar';
-        window.__cajaCobroEnCurso=false;
-        window.__cajaCobroEnCursoHasta=0;
-        showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
-        removeMesaByAnyId(mesaActivaId);save();renderVentas();return;
-      }
-    }
-  }
-  const totalVenta=money2(carritoTotalFn(carrito));
-  const paymentState=getCurrentPaymentState(totalVenta);
-  if(!paymentState.valido){showToast(paymentState.mensaje||'Revisá los pagos');btn.disabled=false;btn.textContent=esReserva?'Cobrar reserva':'Cerrar y cobrar';window.__cajaCobroEnCurso=false;window.__cajaCobroEnCursoHasta=0;return;}
-  const momentoVenta=new Date();
-  const fecha=getLocalDateString(momentoVenta),hora=getLocalTimeString(momentoVenta),ts=getLocalTimestamp(momentoVenta);
-  const turnoActivo=turno&&turno.abierto?turno:null;
-  const operador=operadorCobro||(turnoActivo?turnoActivo.operador:'Sin turno');
-  const operatorId=operatorIdCobro||turnoActivo?.operator_id||turnoActivo?.metadata?.operator_id||getOperatorByName(operador)?.id||null;
-  const ventaIds=[];
-  const ticketId='t_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-  let tipoVenta='salon',nombreMesa='';
-  let reservaActiva=null,clienteReserva=null;
-  if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){reservaActiva=r;tipoVenta=r.tipo||'salon';nombreMesa=r.nombre;clienteReserva=customers.find(c=>String(c.id||'')===String(r.clienteId||''))||null;}}
-  else{const m=findMesaByAnyId(mesaActivaId);if(m){tipoVenta=m.tipo||'salon';nombreMesa=m.nombre;}}
-  const _openOrderSbId=!esReserva?(findMesaByAnyId(mesaActivaId)?._sb_id||null):null;
-  const nuevas=items.map(item=>{
-     const p=findProductById(item.prodId);
-     const varsExtra=(item.vars||[]).reduce((s,v)=>s+v.precio,0);
-     const ventaId='v_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-     ventaIds.push(ventaId);
-     if(p&&!p.ilimitado)p.stock=Math.max(0,(p.stock||0)-item.qty);
-     return{id:ventaId,fecha,hora,timestamp:ts,operador,mesa:nombreMesa,tipo:tipoVenta,
-       ticket_id:ticketId,payment_mode:paymentState.payment_mode,pagos:paymentState.pagos,
-       producto:p?p.name:'?',variantes:(item.vars||[]).map(v=>v.nombre).join(', '),
-       nota:item.nota||'',categoria:getCat(p?.cat).name,seccion:getCat(p?.cat).seccion,
-       cantidad:item.qty,precioBase:item.precio,precioVars:varsExtra,
-        total:(item.precio+varsExtra)*item.qty,pago:paymentState.pago,cat:p?.cat,
-        prodId:item.prodId,_product_sb_id:p?._sb_id||null,_product_legacy_id:p?.legacy_id||(!window.isValidUuid?.(String(p?.id||''))?String(p?.id||''):''),
-        _operator_id:operatorId,
-        _shift_sb_id:turnoActivo?turnoActivo._sb_id||null:null,
-       _reservation_local_id:reservaActiva?.id||null,_reservation_sb_id:reservaActiva?._sb_id||null,
-       _customer_local_id:reservaActiva?.clienteId||null,_customer_sb_id:clienteReserva?._sb_id||null,
-       _source_kind:esReserva?'reserva':'mesa',
-       _sb_sync_status:'pending',_sb_sync_error:'',_sb_synced_at:'',_sb_retry_count:0,
-       _open_order_sb_id:_openOrderSbId};
-   });
-  ventas.push(...nuevas);
-  if(turnoActivo)turnoActivo.ventasIds=[...(turnoActivo.ventasIds||[]),...ventaIds];
-  if(esReserva){const r=reservas.find(x=>x.id===mesaActivaId.replace('reserva_',''));if(r){r.estado='pagada';r.pago=paymentState.pago;r.payment_mode=paymentState.payment_mode;r.pagos=paymentState.pagos;}}
-  else{
-    const mesaCobrada=findMesaByAnyId(mesaActivaId);
-    removeMesaByAnyId(mesaActivaId);
-    if(mesaCobrada?._sb_id)window.deleteOpenOrderFromSupabase?.(mesaCobrada._sb_id).catch(()=>{});
-  }
-  save();if(esReserva)syncReservasSheets();else syncMesasSheets();if(turnoActivo&&turno===turnoActivo)syncTurnoSheets();
-  const ok=await syncVentasSheets(nuevas);
-  showToast(ok?'✓ Venta guardada en Sheets':(config.webappUrl?'✓ Registrada (sin internet)':'✓ Venta registrada'));
   try{
-    const salesSync=await window.saveSaleRowsToSupabase?.(nuevas);
-    if(salesSync?.ok)showToast('✓ Venta guardada');
+    await cajaWithTimeout((async()=>{
+      // ── Anti-double-cobro: verificar que la mesa siga abierta en Supabase ──
+      if(!esReserva&&window.checkOpenOrderStillOpen){
+        const mesaChk=findMesaByAnyId(mesaActivaId);
+        if(!mesaChk){showToast('No pudimos cargar esta mesa. Reintentá.');return;}
+        if(mesaChk?._sb_id){
+          const stillOpen=await cajaWithTimeout(window.checkOpenOrderStillOpen(mesaChk._sb_id).catch(()=>true),'check_open_order',10000);
+          if(stillOpen===false){
+            showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
+            removeMesaByAnyId(mesaActivaId);save();renderVentas();return;
+          }
+        }
+      }
+      const totalVenta=money2(carritoTotalFn(carrito));
+      const paymentState=getCurrentPaymentState(totalVenta);
+      if(!paymentState.valido){showToast(paymentState.mensaje||'Revisá los pagos');return;}
+      const momentoVenta=new Date();
+      const fecha=getLocalDateString(momentoVenta),hora=getLocalTimeString(momentoVenta),ts=getLocalTimestamp(momentoVenta);
+      const turnoActivo=turno&&turno.abierto?turno:null;
+      const operador=operadorCobro||(turnoActivo?turnoActivo.operador:'Sin turno');
+      const operatorId=operatorIdCobro||turnoActivo?.operator_id||turnoActivo?.metadata?.operator_id||getOperatorByName(operador)?.id||null;
+      const ventaIds=[];
+      const ticketId='t_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+      let tipoVenta='salon',nombreMesa='';
+      let reservaActiva=null,clienteReserva=null;
+      if(esReserva){
+        const reservaId=mesaActivaId.replace('reserva_','');
+        const r=reservas.find(x=>String(x.id||'')===String(reservaId));
+        if(!r){showToast('No pudimos cobrar la reserva. Reintentá.');return;}
+        reservaActiva=r;tipoVenta=r.tipo||'salon';nombreMesa=r.nombre;
+        clienteReserva=clientes.find(c=>String(c.id||'')===String(r.clienteId||''))||null;
+        if(findExistingReservationSaleRows(r).length||await reservationHasRemoteSale(r)){
+          r.estado='pagada';r.pago=paymentState.pago;r.payment_mode=paymentState.payment_mode;r.pagos=paymentState.pagos;
+          save();syncReservasSheets();window.saveReservationToSupabase?.(r).catch(err=>window.canShowClientTechnicalUi?.()&&console.warn('[Caja] reserva ya cobrada, update failed',err));
+          showToast('Esta reserva ya estaba cobrada.');
+          renderVentas();
+          return;
+        }
+      }else{
+        const m=findMesaByAnyId(mesaActivaId);if(m){tipoVenta=m.tipo||'salon';nombreMesa=m.nombre;}
+      }
+      const _openOrderSbId=!esReserva?(findMesaByAnyId(mesaActivaId)?._sb_id||null):null;
+      const nuevas=items.map(item=>{
+        const p=findProductById(item.prodId);
+        const varsExtra=(item.vars||[]).reduce((s,v)=>s+v.precio,0);
+        const ventaId='v_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+        ventaIds.push(ventaId);
+        if(p&&!p.ilimitado)p.stock=Math.max(0,(p.stock||0)-item.qty);
+        return{id:ventaId,fecha,hora,timestamp:ts,operador,mesa:nombreMesa,tipo:tipoVenta,
+          ticket_id:ticketId,payment_mode:paymentState.payment_mode,pagos:paymentState.pagos,
+          producto:p?p.name:'?',variantes:(item.vars||[]).map(v=>v.nombre).join(', '),
+          nota:item.nota||'',categoria:getCat(p?.cat).name,seccion:getCat(p?.cat).seccion,
+          cantidad:item.qty,precioBase:item.precio,precioVars:varsExtra,
+          total:(item.precio+varsExtra)*item.qty,pago:paymentState.pago,cat:p?.cat,
+          prodId:item.prodId,_product_sb_id:p?._sb_id||null,_product_legacy_id:p?.legacy_id||(!window.isValidUuid?.(String(p?.id||''))?String(p?.id||''):''),
+          _operator_id:operatorId,
+          _shift_sb_id:turnoActivo?turnoActivo._sb_id||null:null,
+          _reservation_local_id:reservaActiva?.id||null,_reservation_sb_id:reservaActiva?._sb_id||null,
+          _customer_local_id:reservaActiva?.clienteId||null,_customer_sb_id:clienteReserva?._sb_id||null,
+          _source_kind:esReserva?'reserva':'mesa',
+          _sb_sync_status:'pending',_sb_sync_error:'',_sb_synced_at:'',_sb_retry_count:0,
+          _open_order_sb_id:_openOrderSbId};
+      });
+      ventas.push(...nuevas);
+      if(turnoActivo)turnoActivo.ventasIds=[...(turnoActivo.ventasIds||[]),...ventaIds];
+      if(esReserva&&reservaActiva){
+        reservaActiva.estado='pagada';reservaActiva.pago=paymentState.pago;reservaActiva.payment_mode=paymentState.payment_mode;reservaActiva.pagos=paymentState.pagos;
+      }else{
+        const mesaCobrada=findMesaByAnyId(mesaActivaId);
+        removeMesaByAnyId(mesaActivaId);
+        if(mesaCobrada?._sb_id)window.deleteOpenOrderFromSupabase?.(mesaCobrada._sb_id).catch(()=>{});
+      }
+      save();if(esReserva)syncReservasSheets();else syncMesasSheets();if(turnoActivo&&turno===turnoActivo)syncTurnoSheets();
+      const ok=await cajaWithTimeout(syncVentasSheets(nuevas),'sync_ventas_sheets',10000).catch(()=>false);
+      showToast(ok?'✓ Venta guardada en Sheets':(config.webappUrl?'✓ Registrada (sin internet)':'✓ Venta registrada'));
+      try{
+        const salesSync=await cajaWithTimeout(window.saveSaleRowsToSupabase?.(nuevas),'save_sale_supabase',12000);
+        if(salesSync?.ok)showToast('✓ Venta guardada');
+      }catch(err){
+        if(window.canShowClientTechnicalUi?.())console.warn('[Caja] venta local creada, Supabase sales falló',err);
+        showToast('Venta registrada. Se actualizará cuando vuelva la conexión.');
+      }
+      if(esReserva&&reservaActiva&&window.saveReservationToSupabase){
+        try{
+          await cajaWithTimeout(window.saveReservationToSupabase(reservaActiva),'close_reservation_supabase',10000);
+        }catch(err){
+          if(window.canShowClientTechnicalUi?.())console.warn('[Caja] venta creada pero reserva no se actualizó en Supabase',err);
+        }
+      }
+      renderVentas();
+    })(),'ejecutar_cobro',15000);
   }catch(err){
-    showToast('Venta registrada. Se actualizará cuando vuelva la conexión.');
+    if(window.canShowClientTechnicalUi?.())console.error('[Caja] ejecutarCobro failed',err);
+    showToast(esReserva?'No pudimos cobrar la reserva. Reintentá.':'No pudimos cobrar la mesa. Reintentá.');
+  }finally{
+    btn.disabled=false;btn.textContent=esReserva?'Cobrar reserva':'Cerrar y cobrar';
+    window.__cajaCobroEnCurso=false;
+    window.__cajaCobroEnCursoHasta=0;
   }
-  btn.disabled=false;btn.textContent='Cerrar y cobrar';
-  window.__cajaCobroEnCurso=false;
-  window.__cajaCobroEnCursoHasta=0;
-  renderVentas();
 }
 
 // ══════════════════════════════════════════════════
@@ -4477,6 +4552,9 @@ if(config.webappUrl){loadFromSheets();}
   let ooLastRefreshReason='';
   let ooLastRefreshStartedAt='';
   let ooLastRefreshEndedAt='';
+  let ooLastTechnicalError=null;
+  let ooLastOperation=null;
+  let ooReadyRetryScheduled=false;
 
   // ── Debounce / cooldown ────────────────────────────
   let ooFetching=false;
@@ -4505,6 +4583,25 @@ if(config.webappUrl){loadFromSheets();}
   }
   function ooTechLog(eventName,data){
     if(window.canShowClientTechnicalUi?.()) console.log(`[Caja] ${eventName}`,data||{});
+  }
+  function ooRememberOperation(table,operation,query){
+    ooLastOperation={table,operation,query,store_id:ooStoreId()||'',at:new Date().toISOString()};
+  }
+  function ooRememberError(err,op=ooLastOperation){
+    ooLastTechnicalError={
+      code:err?.code||'',
+      message:err?.message||String(err)||'Error desconocido',
+      details:err?.details||'',
+      hint:err?.hint||'',
+      table:op?.table||'',
+      operation:op?.operation||'',
+      query:op?.query||'',
+      store_id:op?.store_id||ooStoreId()||'',
+      sessionActive:!!ooClient()?.auth,
+      role:window.getSupabaseActiveRole?.()||window.getActiveStoreRole?.()||'',
+      at:new Date().toISOString()
+    };
+    return ooLastTechnicalError;
   }
   function ooSetState(s,err){
     ooState=s;ooError=err||'';
@@ -4634,6 +4731,13 @@ if(config.webappUrl){loadFromSheets();}
     if(!ooReady()){
       const ready=await waitForOOReady(3000);
       if(!ready){
+        if(!ooHasSupabaseRead&&!ooReadyRetryScheduled){
+          ooReadyRetryScheduled=true;
+          ooSetState('syncing','');
+          setTimeout(()=>{ooReadyRetryScheduled=false;triggerOORefresh('ready_retry');},1200);
+          ooRenderVisible();
+          return{ok:false,reason:'waiting_context'};
+        }
         ooSetState(ooLocalMesaCount()?'local':'error','No se pudo cargar la sesión o tienda activa');
         ooToastLoadError(silent);
         ooRenderVisible();
@@ -4657,6 +4761,7 @@ if(config.webappUrl){loadFromSheets();}
       // SELECT con columnas que existen en cualquier schema estándar de open_orders
       let orders,ordersErr;
       const extendedCols='id,store_id,shift_id,operator_name,operator_id,service_type,table_label,metadata,created_at';
+      ooRememberOperation('open_orders','select',`select ${extendedCols} where store_id=${storeId} and status=open`);
       ({data:orders,error:ordersErr}=await ooWithTimeout(client
         .from('open_orders')
         .select(extendedCols)
@@ -4666,6 +4771,7 @@ if(config.webappUrl){loadFromSheets();}
 
       if((!orders||!orders.length)&&Date.now()<ooRecentLocalCreateUntil&&ooLocalMesaCount()){
         await new Promise(r=>setTimeout(r,800));
+        ooRememberOperation('open_orders','select_retry',`select ${extendedCols} where store_id=${storeId} and status=open`);
         ({data:orders,error:ordersErr}=await ooWithTimeout(client
           .from('open_orders')
           .select(extendedCols)
@@ -4692,6 +4798,7 @@ if(config.webappUrl){loadFromSheets();}
       }
 
       const orderIds=orders.map(o=>o.id);
+      ooRememberOperation('open_order_items','select',`select items where store_id=${storeId} and open_order_id in (${orderIds.length} ids)`);
       const{data:items,error:itemsErr}=await ooWithTimeout(client
         .from('open_order_items')
         .select('id,open_order_id,product_id,product_legacy_id,product_name,quantity,unit_price,variants,note,sort_order,metadata')
@@ -4755,6 +4862,7 @@ if(config.webappUrl){loadFromSheets();}
       return{ok:true,count:orders.length};
     }catch(err){
       const msg=err?.message||String(err)||'Error desconocido';
+      ooRememberError(err);
       ooSetState('error',msg);
       // Solo mostrar mensaje al cliente si es un error real de red/permisos y no es silencioso
       if(!silent && typeof window.showToast==='function'){
@@ -4785,6 +4893,7 @@ if(config.webappUrl){loadFromSheets();}
     if(!client||!storeId||!sid)return null;
     try{
       const orderSelect='id,store_id,shift_id,operator_name,operator_id,service_type,table_label,metadata,created_at,status';
+      ooRememberOperation('open_orders','select_single',`select ${orderSelect} where store_id=${storeId} and id=${sid}`);
       let {data:order,error}=await ooWithTimeout(client
         .from('open_orders')
         .select(orderSelect)
@@ -4793,6 +4902,7 @@ if(config.webappUrl){loadFromSheets();}
         .maybeSingle(),'single_open_order');
       if(error)throw error;
       if(!order){
+        ooRememberOperation('open_orders','select_single_legacy',`select ${orderSelect} where store_id=${storeId} and metadata.legacy_local_id=${sid}`);
         const byLegacy=await ooWithTimeout(client
           .from('open_orders')
           .select(orderSelect)
@@ -4804,6 +4914,7 @@ if(config.webappUrl){loadFromSheets();}
         order=byLegacy.data||null;
       }
       if(!order||order.status!=='open')return null;
+      ooRememberOperation('open_order_items','select_single_items',`select items where store_id=${storeId} and open_order_id=${order.id}`);
       const {data:items,error:itemsErr}=await ooWithTimeout(client
         .from('open_order_items')
         .select('id,open_order_id,product_id,product_legacy_id,product_name,quantity,unit_price,variants,note,sort_order,metadata')
@@ -4830,6 +4941,7 @@ if(config.webappUrl){loadFromSheets();}
       ooSetState('supabase','');ooLastRead=ooStamp();ooUpdateDiag();
       return mesa;
     }catch(err){
+      ooRememberError(err);
       ooSetState('error',err?.message||String(err));
       ooUpdateDiag();
       return null;
@@ -5013,7 +5125,8 @@ if(config.webappUrl){loadFromSheets();}
       +`<div><strong>Realtime:</strong> ${ooRealtimeActive?'✅ activo':'❌ inactivo'}</div>`
       +`<div><strong>open_orders:</strong> ${ooCount} &nbsp;|&nbsp; <strong>items:</strong> ${ooItemCount}</div>`
       +(ooLastRead?`<div><strong>Última lectura:</strong> ${ooLastRead}</div>`:'')
-      +(ooError?`<div style="color:var(--red)"><strong>Último error:</strong> ${ooError}</div>`:'');
+      +(ooError?`<div style="color:var(--red)"><strong>Último error:</strong> ${ooError}</div>`:'')
+      +(ooLastTechnicalError?`<div style="color:var(--red)"><strong>Error técnico:</strong> ${escapeHtml(ooLastTechnicalError.table||'')} · ${escapeHtml(ooLastTechnicalError.operation||'')} · ${escapeHtml(ooLastTechnicalError.code||'sin código')} · ${escapeHtml(ooLastTechnicalError.message||'')}</div>`:'');
   }
 
   // ── Refresh helper unificado con debounce ─────────
@@ -5026,7 +5139,7 @@ if(config.webappUrl){loadFromSheets();}
       ooTechLog('refresh skipped payment_processing',{reason:ctx});
       return{ok:false,reason:'payment_processing'};
     }
-    const force=['post_action','realtime','focus','tab','online','manual'].includes(ctx);
+    const force=['post_action','realtime','focus','tab','online','manual','ready_retry'].includes(ctx);
     const silent=!['post_action','manual'].includes(ctx);
     const r=await loadOpenOrdersFromSupabase({force,silent,reason:ctx||'direct'});
     ooRenderVisible();
@@ -5054,6 +5167,7 @@ if(config.webappUrl){loadFromSheets();}
     try{
       const client=ooClient(),storeId=ooStoreId();
       if(!client||!storeId)throw new Error('No hay cliente o tienda activa');
+      ooRememberOperation('open_orders','smoke_count',`count open_orders where store_id=${storeId} and status=open`);
       const ordersRes=await ooWithTimeout(client
         .from('open_orders')
         .select('id',{count:'exact',head:true})
@@ -5061,6 +5175,7 @@ if(config.webappUrl){loadFromSheets();}
         .eq('status','open'),'smoke_open_orders');
       if(ordersRes.error)throw ordersRes.error;
       supabaseOrdersCount=ordersRes.count??0;
+      ooRememberOperation('open_order_items','smoke_count',`count open_order_items where store_id=${storeId}`);
       const itemsRes=await ooWithTimeout(client
         .from('open_order_items')
         .select('id',{count:'exact',head:true})
@@ -5069,6 +5184,7 @@ if(config.webappUrl){loadFromSheets();}
       supabaseItemsCount=itemsRes.count??0;
     }catch(err){
       error=err?.message||String(err)||'Error desconocido';
+      ooRememberError(err);
     }
     const endedAt=new Date().toISOString();
     const rows=[
@@ -5083,6 +5199,14 @@ if(config.webappUrl){loadFromSheets();}
       ['último refresh start',ooLastRefreshStartedAt||'—'],
       ['último refresh end',ooLastRefreshEndedAt||'—'],
       ['último motivo refresh',ooLastRefreshReason||'—'],
+      ['error code',ooLastTechnicalError?.code||'—'],
+      ['error message',ooLastTechnicalError?.message||error||'—'],
+      ['error table',ooLastTechnicalError?.table||'—'],
+      ['error operation',ooLastTechnicalError?.operation||'—'],
+      ['store_id usado',ooLastTechnicalError?.store_id||ooStoreId()||'—'],
+      ['session active',ooLastTechnicalError?.sessionActive?'sí':'no'],
+      ['role actual',ooLastTechnicalError?.role||window.getSupabaseActiveRole?.()||window.getActiveStoreRole?.()||'—'],
+      ['query',ooLastTechnicalError?.query||ooLastOperation?.query||'—'],
       ['smoke start/end',`${startedAt} → ${endedAt}`],
       ['último error',error||ooError||'—']
     ];
@@ -5092,7 +5216,7 @@ if(config.webappUrl){loadFromSheets();}
         +rows.map(([k,v])=>`<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(v)}</div>`).join('')
         +(ooState==='syncing'?'<div style="color:var(--red);font-weight:600;margin-top:4px">Atención: ooState sigue en syncing.</div>':'');
     }
-    console.log('[Caja] smoke test',{openOrdersSource:source,ooState,refreshRunning:!!ooRefreshPromise,localOpenCount,supabaseOrdersCount,supabaseItemsCount,mesaActivaId,cartCount,lastRefreshStart:ooLastRefreshStartedAt,lastRefreshEnd:ooLastRefreshEndedAt,lastRefreshReason:ooLastRefreshReason,error});
+    console.log('[Caja] smoke test',{openOrdersSource:source,ooState,refreshRunning:!!ooRefreshPromise,localOpenCount,supabaseOrdersCount,supabaseItemsCount,mesaActivaId,cartCount,lastRefreshStart:ooLastRefreshStartedAt,lastRefreshEnd:ooLastRefreshEndedAt,lastRefreshReason:ooLastRefreshReason,error,technicalError:ooLastTechnicalError,lastOperation:ooLastOperation});
     if(btn){btn.disabled=false;btn.textContent='Diagnosticar Caja';}
   }
 
@@ -5178,6 +5302,8 @@ if(config.webappUrl){loadFromSheets();}
       lastRefreshReason:ooLastRefreshReason,
       lastRefreshStartedAt:ooLastRefreshStartedAt,
       lastRefreshEndedAt:ooLastRefreshEndedAt,
+      technicalError:ooLastTechnicalError,
+      lastOperation:ooLastOperation,
       ready:ooReady()
     };
   };
@@ -9863,7 +9989,7 @@ if(config.webappUrl){loadFromSheets();}
     if(isValidUuid(String(ref._customer_sb_id||''))) return String(ref._customer_sb_id);
     const localId=String(ref._customer_local_id||'');
     if(!localId) return null;
-    const local=customers.find(c=>String(c.id||'')===localId);
+    const local=clientes.find(c=>String(c.id||'')===localId);
     if(isValidUuid(String(local?._sb_id||''))) return String(local._sb_id);
     const legacyId=String(local?.legacy_id||local?.id||localId||'');
     if(cache.customers?.[legacyId]) return cache.customers[legacyId];
