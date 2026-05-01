@@ -952,8 +952,10 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <div id="oo-sb-box" style="display:none;margin-top:14px">
           <div style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Mesas abiertas · Estado de sincronización</div>
           <div id="oo-sb-diag" style="font-size:12px;color:var(--ink2);background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;line-height:1.7"></div>
+          <div id="oo-smoke-diag" style="display:none;font-size:12px;color:var(--ink2);background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;line-height:1.7;margin-top:8px"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
             <button class="btn-sm ghost" id="btn-actualizar-mesas-tech" onclick="actualizarMesas()">↻ Actualizar mesas</button>
+            <button class="btn-sm ghost" id="btn-diagnosticar-caja-tech" onclick="diagnoseCajaSmoke()">Diagnosticar Caja</button>
           </div>
         </div>
       </div>
@@ -4473,6 +4475,8 @@ if(config.webappUrl){loadFromSheets();}
   let ooRefreshPromise=null;
   let ooLoadingStartedAt=0;
   let ooLastRefreshReason='';
+  let ooLastRefreshStartedAt='';
+  let ooLastRefreshEndedAt='';
 
   // ── Debounce / cooldown ────────────────────────────
   let ooFetching=false;
@@ -4585,6 +4589,7 @@ if(config.webappUrl){loadFromSheets();}
       return ooRefreshPromise;
     }
     ooLastRefreshReason=reason;
+    ooLastRefreshStartedAt=new Date().toISOString();
     ooTechLog('refresh start',{reason});
     ooRefreshPromise=loadOpenOrdersFromSupabaseInner(options)
       .then(r=>{
@@ -4607,6 +4612,7 @@ if(config.webappUrl){loadFromSheets();}
         }
         ooRenderVisible();
         ooTechLog('refresh finally loading=false',{reason});
+        ooLastRefreshEndedAt=new Date().toISOString();
         ooRefreshPromise=null;
         ooLastRefreshReason='';
       });
@@ -5003,6 +5009,7 @@ if(config.webappUrl){loadFromSheets();}
       +`<div><strong>Mesa activa:</strong> ${window.__cajaLastNavEvent?.selectedOpenOrderId||mesaActivaId||'—'}</div>`
       +`<div><strong>Última navegación Caja:</strong> ${window.__cajaLastNavEvent?.event||'—'}${window.__cajaLastNavEvent?.at?' · '+window.__cajaLastNavEvent.at:''}</div>`
       +`<div><strong>Refresh mesas:</strong> ${ooRefreshPromise?'en curso':'idle'}${ooLastRefreshReason?' · '+ooLastRefreshReason:''}</div>`
+      +`<div><strong>Último refresh:</strong> ${ooLastRefreshStartedAt||'—'}${ooLastRefreshEndedAt?' → '+ooLastRefreshEndedAt:''}</div>`
       +`<div><strong>Realtime:</strong> ${ooRealtimeActive?'✅ activo':'❌ inactivo'}</div>`
       +`<div><strong>open_orders:</strong> ${ooCount} &nbsp;|&nbsp; <strong>items:</strong> ${ooItemCount}</div>`
       +(ooLastRead?`<div><strong>Última lectura:</strong> ${ooLastRead}</div>`:'')
@@ -5029,6 +5036,64 @@ if(config.webappUrl){loadFromSheets();}
     // En modo técnico: actualizar diagnóstico siempre
     ooUpdateDiag();
     return r;
+  }
+
+  async function diagnoseCajaSmoke(){
+    if(!window.canShowClientTechnicalUi?.())return;
+    const btn=document.getElementById('btn-diagnosticar-caja-tech');
+    const box=document.getElementById('oo-smoke-diag');
+    if(btn){btn.disabled=true;btn.textContent='Diagnosticando…';}
+    if(box){box.style.display='block';box.innerHTML='Leyendo estado de Caja…';}
+    const startedAt=new Date().toISOString();
+    const source=ooState==='supabase'?'Supabase':ooState==='syncing'?'syncing':ooState==='error'?'error':'local';
+    const localOpenCount=Array.isArray(mesas)?mesas.length:0;
+    const cartCount=Object.values(carrito||{}).reduce((sum,item)=>sum+(Number(item.qty)||0),0);
+    let supabaseOrdersCount=null;
+    let supabaseItemsCount=null;
+    let error='';
+    try{
+      const client=ooClient(),storeId=ooStoreId();
+      if(!client||!storeId)throw new Error('No hay cliente o tienda activa');
+      const ordersRes=await ooWithTimeout(client
+        .from('open_orders')
+        .select('id',{count:'exact',head:true})
+        .eq('store_id',storeId)
+        .eq('status','open'),'smoke_open_orders');
+      if(ordersRes.error)throw ordersRes.error;
+      supabaseOrdersCount=ordersRes.count??0;
+      const itemsRes=await ooWithTimeout(client
+        .from('open_order_items')
+        .select('id',{count:'exact',head:true})
+        .eq('store_id',storeId),'smoke_open_order_items');
+      if(itemsRes.error)throw itemsRes.error;
+      supabaseItemsCount=itemsRes.count??0;
+    }catch(err){
+      error=err?.message||String(err)||'Error desconocido';
+    }
+    const endedAt=new Date().toISOString();
+    const rows=[
+      ['openOrdersSource',source],
+      ['ooState',ooState],
+      ['ooRefreshPromise activa',ooRefreshPromise?'sí':'no'],
+      ['mesas abiertas en memoria',localOpenCount],
+      ['open_orders Supabase',supabaseOrdersCount??'error'],
+      ['open_order_items Supabase',supabaseItemsCount??'error'],
+      ['mesaActivaId',mesaActivaId||'—'],
+      ['carrito item count',cartCount],
+      ['último refresh start',ooLastRefreshStartedAt||'—'],
+      ['último refresh end',ooLastRefreshEndedAt||'—'],
+      ['último motivo refresh',ooLastRefreshReason||'—'],
+      ['smoke start/end',`${startedAt} → ${endedAt}`],
+      ['último error',error||ooError||'—']
+    ];
+    if(box){
+      box.style.display='block';
+      box.innerHTML='<div style="font-weight:600;margin-bottom:4px">Smoke test Caja</div>'
+        +rows.map(([k,v])=>`<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(v)}</div>`).join('')
+        +(ooState==='syncing'?'<div style="color:var(--red);font-weight:600;margin-top:4px">Atención: ooState sigue en syncing.</div>':'');
+    }
+    console.log('[Caja] smoke test',{openOrdersSource:source,ooState,refreshRunning:!!ooRefreshPromise,localOpenCount,supabaseOrdersCount,supabaseItemsCount,mesaActivaId,cartCount,lastRefreshStart:ooLastRefreshStartedAt,lastRefreshEnd:ooLastRefreshEndedAt,lastRefreshReason:ooLastRefreshReason,error});
+    if(btn){btn.disabled=false;btn.textContent='Diagnosticar Caja';}
   }
 
   function scheduleOORealtimeRefresh(){
@@ -5087,6 +5152,7 @@ if(config.webappUrl){loadFromSheets();}
   // ── Exponer globalmente ────────────────────────────
   window.loadOpenOrdersFromSupabase=loadOpenOrdersFromSupabase;
   window.loadSingleOpenOrderFromSupabase=loadSingleOpenOrderFromSupabase;
+  window.diagnoseCajaSmoke=diagnoseCajaSmoke;
   window.syncMesaToSupabase=syncMesaToSupabase;
   window.deleteOpenOrderFromSupabase=deleteOpenOrderFromSupabase;
   window.checkOpenOrderStillOpen=checkOpenOrderStillOpen;
@@ -5110,6 +5176,8 @@ if(config.webappUrl){loadFromSheets();}
       loadingStartedAt:ooLoadingStartedAt,
       refreshRunning:!!ooRefreshPromise,
       lastRefreshReason:ooLastRefreshReason,
+      lastRefreshStartedAt:ooLastRefreshStartedAt,
+      lastRefreshEndedAt:ooLastRefreshEndedAt,
       ready:ooReady()
     };
   };
