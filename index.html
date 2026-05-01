@@ -9514,6 +9514,9 @@ if(config.webappUrl){loadFromSheets();}
           <button class="btn ghost" type="button" onclick="loadSalesFromSupabasePreview()">Leer ventas Supabase preview</button>
           <button class="btn ghost" type="button" onclick="compareLocalSalesVsSupabase()">Comparar ventas local vs Supabase</button>
           <button class="btn ghost" type="button" onclick="debugSalesReadSupabase()">Debug lectura ventas</button>
+          <button class="btn ghost" type="button" onclick="exportLocalRecoveryBackup()">Exportar respaldo local</button>
+          <button class="btn ghost" type="button" onclick="diagnoseLocalRecoveryData()">Diagnosticar datos locales</button>
+          <button class="btn ghost" type="button" onclick="resyncMissingLocalSales()">Reintentar sincronización local</button>
           <button class="btn ghost" type="button" onclick="reloadVisibleHistoryFromSupabase({forceRefresh:true})">Recargar historial desde Supabase</button>
           <button class="btn ghost" type="button" onclick="reloadDashboardFromSupabase({forceRefresh:true})">Recargar dashboard desde Supabase</button>
           <button class="btn ghost" type="button" onclick="buildHistoryPreviewFromSupabase()">Leer preview historial Supabase</button>
@@ -10573,6 +10576,358 @@ if(config.webappUrl){loadFromSheets();}
     });
     console.groupEnd();
     showToast(`Debug pendientes: ${pendingGroups.length} ticket(s)`);
+  };
+  function ensureRecoveryToolsAllowed(){
+    const ok=canSeeSalesTechnicalTools()&&isSalesTechnicalModeEnabled();
+    if(!ok) showToast('Herramienta disponible sólo en modo técnico.');
+    return ok;
+  }
+  function readStorageObject(storage){
+    const out={};
+    try{
+      for(let i=0;i<storage.length;i++){
+        const key=storage.key(i);
+        out[key]=storage.getItem(key);
+      }
+    }catch(err){
+      out.__read_error=err?.message||String(err);
+    }
+    return out;
+  }
+  function parseMaybeJson(value){
+    if(typeof value!=='string') return {ok:false,value};
+    try{return {ok:true,value:JSON.parse(value)};}
+    catch(err){return {ok:false,value,error:err?.message||String(err)};}
+  }
+  function isRecoveryRelevantKey(key){
+    return /(venta|sales|ticket|mesa|order|reserva|reservation|gasto|expense|sync|pending|queue|outbox)/i.test(String(key||''));
+  }
+  function collectRelevantStorageEntries(storageObj){
+    const entries={};
+    Object.keys(storageObj||{}).forEach(key=>{
+      if(!isRecoveryRelevantKey(key)) return;
+      const parsed=parseMaybeJson(storageObj[key]);
+      entries[key]=parsed.ok?parsed.value:{raw:storageObj[key],parseError:parsed.error||''};
+    });
+    return entries;
+  }
+  async function getRecoverySessionInfo(){
+    const client=getSalesSupabaseClient();
+    const info={user:null,storeId:getSalesStoreId(),storeName:getSalesStoreName(),role:getSalesRole()||''};
+    if(!client) return info;
+    try{
+      const session=await getSalesSession(client);
+      info.user=session?.user?{id:session.user.id,email:session.user.email||''}:null;
+    }catch(err){
+      info.sessionError=err?.message||String(err);
+    }
+    return info;
+  }
+  function getRecoveryMemoryState(){
+    return{
+      ventas:Array.isArray(ventas)?ventas:[],
+      mesas:Array.isArray(mesas)?mesas:[],
+      reservas:Array.isArray(reservas)?reservas:[],
+      gastos:Array.isArray(gastos)?gastos:[],
+      carrito:typeof carrito==='object'&&carrito?carrito:{},
+      pendingSales:typeof window.findPendingSalesSyncGroups==='function'
+        ? window.findPendingSalesSyncGroups(ventas||[]).map(group=>({legacyId:getStableSaleLegacyId(group),rows:(group.rows||[]).length,total:money2(group.total),meta:getGroupSyncMeta(group)}))
+        : [],
+      openOrdersState:typeof window.getOpenOrdersSyncState==='function'?window.getOpenOrdersSyncState():null,
+      dashboardState:typeof window.getDashboardState==='function'?window.getDashboardState():null,
+      historyState:typeof window.getVisibleHistoryState==='function'?window.getVisibleHistoryState():null
+    };
+  }
+  function makeRecoveryFilename(){
+    const d=new Date();
+    return `colocafe-local-backup-${getLocalDateString(d)}-${pad2(d.getHours())}-${pad2(d.getMinutes())}.json`;
+  }
+  function downloadJsonFile(filename,payload){
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  window.exportLocalRecoveryBackup=async function(){
+    if(!ensureRecoveryToolsAllowed()) return null;
+    const localStorageDump=readStorageObject(localStorage);
+    const sessionStorageDump=readStorageObject(sessionStorage);
+    const payload={
+      exported_at:new Date().toISOString(),
+      exported_at_local:getLocalTimestamp(),
+      appVersion:window.APP_VERSION||APP_VERSION,
+      appDataVersion:window.APP_DATA_VERSION||APP_DATA_VERSION,
+      context:await getRecoverySessionInfo(),
+      localStorage:localStorageDump,
+      sessionStorage:sessionStorageDump,
+      relevantLocalStorage:collectRelevantStorageEntries(localStorageDump),
+      relevantSessionStorage:collectRelevantStorageEntries(sessionStorageDump),
+      memory:getRecoveryMemoryState()
+    };
+    console.log('[Recovery local backup]',payload);
+    downloadJsonFile(makeRecoveryFilename(),payload);
+    showToast('Respaldo local exportado.');
+    return payload;
+  };
+  function getSaleGroupTimestamp(group){
+    const ts=group?.ref?.timestamp||'';
+    const d=ts?new Date(ts):null;
+    return d&&!Number.isNaN(d.getTime())?d:null;
+  }
+  function minuteBucket(date){
+    if(!date) return '';
+    return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth()+1)}-${pad2(date.getUTCDate())}T${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}`;
+  }
+  function normalizeOperatorKey(value){
+    return normalizeOperatorName(value||'').toLowerCase();
+  }
+  function getRemoteSaleIdentity(row){
+    const meta=row?.metadata||{};
+    return{
+      id:row?.id||'',
+      legacyId:String(row?.legacy_id||''),
+      ticketId:String(meta.ticket_id||''),
+      fallbackKey:String(meta.fallback_key||''),
+      localIds:Array.isArray(meta.ventas_ids)?meta.ventas_ids.map(v=>String(v)):[],
+      openOrderId:String(row?.open_order_id||''),
+      reservationId:String(row?.reservation_id||''),
+      businessDate:String(row?.business_date||''),
+      operator:normalizeOperatorKey(row?.operator_name||''),
+      total:money2(row?.total_amount),
+      soldAt:row?.sold_at||'',
+      soldAtMs:row?.sold_at&&!Number.isNaN(new Date(row.sold_at).getTime())?new Date(row.sold_at).getTime():0
+    };
+  }
+  function getLocalSaleGroupIdentity(group){
+    const ref=group?.ref||{};
+    const d=getSaleGroupTimestamp(group);
+    return{
+      legacyId:String(getStableSaleLegacyId(group)||''),
+      ticketId:String(ref.ticket_id||getStableSaleLegacyId(group)||''),
+      fallbackKey:String(group?.fallbackKey||getSaleFallbackKey(ref)||''),
+      localIds:(group?.rows||[]).map(r=>String(r.id||'')).filter(Boolean),
+      openOrderId:String(ref._open_order_sb_id||''),
+      reservationId:String(ref._reservation_sb_id||''),
+      businessDate:normalizeBusinessDate(ref.fecha,ref.timestamp),
+      operator:normalizeOperatorKey(ref.operador||''),
+      total:money2(group?.total),
+      soldAt:ref.timestamp||'',
+      soldAtMs:d?d.getTime():0,
+      minute:minuteBucket(d)
+    };
+  }
+  function buildRemoteSalesIndex(remoteSales){
+    const rows=(remoteSales||[]).map(getRemoteSaleIdentity);
+    const byLegacy=new Map();
+    const byTicket=new Map();
+    const byFallback=new Map();
+    const byLocalId=new Map();
+    rows.forEach(row=>{
+      if(row.legacyId) byLegacy.set(row.legacyId,row);
+      if(row.ticketId) byTicket.set(row.ticketId,row);
+      if(row.fallbackKey) byFallback.set(row.fallbackKey,row);
+      row.localIds.forEach(id=>byLocalId.set(id,row));
+    });
+    return{rows,byLegacy,byTicket,byFallback,byLocalId};
+  }
+  function findPossibleRemoteDuplicate(local,index){
+    return (index.rows||[]).find(row=>{
+      if(row.businessDate!==local.businessDate) return false;
+      if(row.operator!==local.operator) return false;
+      if(Math.abs(money2(row.total)-money2(local.total))>1) return false;
+      if(row.soldAtMs&&local.soldAtMs) return Math.abs(row.soldAtMs-local.soldAtMs)<=120000;
+      return true;
+    })||null;
+  }
+  async function fetchRemoteSalesForRecovery(){
+    if(!hasSalesSupabaseReady()) throw new Error('Supabase no configurado');
+    const client=getSalesSupabaseClient();
+    const storeId=getSalesStoreId();
+    if(!client) throw new Error('Cliente Supabase no disponible');
+    if(!storeId) throw new Error('No hay tienda activa');
+    if(!isValidUuid(storeId)) throw new Error('Store ID inválido');
+    const session=await getSalesSession(client);
+    if(!session) throw new Error('No hay sesión activa');
+    const {data,error}=await client
+      .from('sales')
+      .select('id,store_id,legacy_id,business_date,sold_at,operator_name,total_amount,open_order_id,reservation_id,metadata')
+      .eq('store_id',storeId)
+      .order('sold_at',{ascending:false})
+      .limit(5000);
+    if(error) throw error;
+    return data||[];
+  }
+  function classifyLocalSalesForRecovery(localGroups,remoteSales){
+    const index=buildRemoteSalesIndex(remoteSales);
+    const result={insertable:[],existing:[],possibleDuplicates:[],requiresReview:[]};
+    (localGroups||[]).forEach(group=>{
+      const local=getLocalSaleGroupIdentity(group);
+      const rowCount=(group.rows||[]).length;
+      if(!rowCount || !local.legacyId || local.total<=0){
+        result.requiresReview.push({group,local,reason:'Datos locales insuficientes para reconstruir venta'});
+        return;
+      }
+      const existing=index.byLegacy.get(local.legacyId)
+        || index.byTicket.get(local.ticketId)
+        || index.byFallback.get(local.fallbackKey)
+        || local.localIds.map(id=>index.byLocalId.get(id)).find(Boolean);
+      if(existing){
+        result.existing.push({group,local,remote:existing,reason:'Ya existe en Supabase por identidad estable'});
+        return;
+      }
+      const possible=findPossibleRemoteDuplicate(local,index);
+      if(possible){
+        result.possibleDuplicates.push({group,local,remote:possible,reason:'Coincidencia por fecha, minuto aproximado, total y operador'});
+        return;
+      }
+      result.insertable.push({group,local});
+    });
+    return result;
+  }
+  function summarizeRecoveryClassification(classified,remoteSales){
+    return{
+      localTickets:((classified.insertable||[]).length+(classified.existing||[]).length+(classified.possibleDuplicates||[]).length+(classified.requiresReview||[]).length),
+      remoteTickets:(remoteSales||[]).length,
+      localNotSynced:(classified.insertable||[]).length,
+      alreadyExists:(classified.existing||[]).length,
+      possibleDuplicates:(classified.possibleDuplicates||[]).length,
+      requiresReview:(classified.requiresReview||[]).length
+    };
+  }
+  async function saveMissingSaleGroupToSupabaseStrict(group,entryLocal){
+    if(!hasSalesSupabaseReady()) throw new Error('Supabase no configurado para ventas');
+    const storeId=getSalesStoreId();
+    const client=getSalesSupabaseClient();
+    if(!client) throw new Error('Cliente Supabase no disponible');
+    if(!storeId) throw new Error('No hay tienda activa');
+    if(!isValidUuid(storeId)) throw new Error('Store ID inválido');
+    const session=await getSalesSession(client);
+    if(!session) throw new Error('No hay sesión activa');
+    const existing=await client.from('sales')
+      .select('id,legacy_id')
+      .eq('store_id',storeId)
+      .eq('legacy_id',entryLocal.legacyId)
+      .maybeSingle();
+    if(existing.error) throw existing.error;
+    if(existing.data?.id) return {ok:false,skipped:true,reason:'Ya existe en Supabase',saleId:existing.data.id};
+    const relationCache={products:{},customers:{},reservations:{}};
+    const salePayload=await mapSaleGroupToSupabaseSale(group,{client,storeId,cache:relationCache});
+    const saleInsert=await client.from('sales').insert(salePayload).select('id,legacy_id').single();
+    if(saleInsert.error) throw Object.assign(saleInsert.error,{_salesTable:'sales',_salesOp:'insert',_salesPayload:salePayload});
+    const saleId=saleInsert.data.id;
+    const itemPayloads=await Promise.all((group.rows||[]).map(row=>mapSaleItemToSupabaseItem(row,saleId,{client,storeId,cache:relationCache})));
+    let itemsInserted=0;
+    for(const itemPayload of itemPayloads){
+      const itemInsert=await client.from('sale_items').insert(itemPayload).select('id').single();
+      if(itemInsert.error) throw Object.assign(itemInsert.error,{_salesTable:'sale_items',_salesOp:'insert',_salesPayload:itemPayload,_saleId:saleId});
+      itemsInserted++;
+    }
+    const paymentPayloads=(getTicketPayments(group)||[]).map((payment,index)=>mapSalePaymentToSupabasePayment(payment,saleId,group,index));
+    let paymentsInserted=0;
+    for(const paymentPayload of paymentPayloads){
+      const paymentInsert=await client.from('sale_payments').insert(paymentPayload).select('id').single();
+      if(paymentInsert.error) throw Object.assign(paymentInsert.error,{_salesTable:'sale_payments',_salesOp:'insert',_salesPayload:paymentPayload,_saleId:saleId});
+      paymentsInserted++;
+    }
+    markLocalSaleRowsSync(group.rows,{saleId,status:'synced',error:''});
+    salesLastSyncAt=stampSalesMoment();
+    setSalesWriteState('ready');
+    return {ok:true,saleId,legacyId:saleInsert.data.legacy_id||entryLocal.legacyId,itemsInserted,paymentsInserted};
+  }
+  window.diagnoseLocalRecoveryData=async function(){
+    if(!ensureRecoveryToolsAllowed()) return null;
+    try{
+      const localStorageDump=readStorageObject(localStorage);
+      const sessionStorageDump=readStorageObject(sessionStorage);
+      const localGroups=groupLocalSaleRowsByTicket(ventas||[]);
+      const remoteSales=await fetchRemoteSalesForRecovery();
+      const classified=classifyLocalSalesForRecovery(localGroups,remoteSales);
+      const summary={
+        ...summarizeRecoveryClassification(classified,remoteSales),
+        localSaleRows:(ventas||[]).length,
+        localReservations:(reservas||[]).length,
+        localExpenses:(gastos||[]).length,
+        localTables:(mesas||[]).length,
+        pendingSales:findPendingSalesSyncGroups(ventas||[]).length,
+        localKeys:Object.keys(localStorageDump).filter(isRecoveryRelevantKey),
+        sessionKeys:Object.keys(sessionStorageDump).filter(isRecoveryRelevantKey),
+        parseErrors:Object.entries({...localStorageDump,...sessionStorageDump})
+          .filter(([key,value])=>isRecoveryRelevantKey(key)&&!parseMaybeJson(value).ok&&String(value||'').trim().startsWith('{'))
+          .map(([key,value])=>({key,error:parseMaybeJson(value).error||'parse failed'}))
+      };
+      const report={
+        summary,
+        insertable:classified.insertable.map(x=>x.local),
+        existing:classified.existing.map(x=>({local:x.local,remote:x.remote,reason:x.reason})),
+        possibleDuplicates:classified.possibleDuplicates.map(x=>({local:x.local,remote:x.remote,reason:x.reason})),
+        requiresReview:classified.requiresReview.map(x=>({local:x.local,reason:x.reason})),
+        reservationsLocal:reservas||[],
+        expensesLocal:gastos||[],
+        tablesLocal:mesas||[],
+        relevantLocalStorage:collectRelevantStorageEntries(localStorageDump),
+        relevantSessionStorage:collectRelevantStorageEntries(sessionStorageDump)
+      };
+      console.log('[Recovery diagnose local data]',report);
+      showToast(`Diagnóstico local: ${summary.localNotSynced} venta(s) faltante(s), ${summary.possibleDuplicates} posible(s) duplicado(s).`);
+      return report;
+    }catch(err){
+      console.error('[Recovery diagnose failed]',{message:err?.message||String(err),code:err?.code||'',details:err?.details||'',hint:err?.hint||''});
+      showToast('No pudimos diagnosticar datos locales. Reintentá.');
+      return null;
+    }
+  };
+  window.resyncMissingLocalSales=async function(){
+    if(!ensureRecoveryToolsAllowed()) return null;
+    if(!confirm('Esto intentará subir a Supabase sólo ventas locales faltantes y omitirá posibles duplicados. Primero exportá un respaldo local. ¿Continuar?')) return null;
+    const summary={inserted:0,existing:0,possibleDuplicates:0,errors:0,requiresReview:0,itemsInserted:0,paymentsInserted:0,details:[]};
+    try{
+      const remoteSales=await fetchRemoteSalesForRecovery();
+      const classified=classifyLocalSalesForRecovery(groupLocalSaleRowsByTicket(ventas||[]),remoteSales);
+      summary.existing=classified.existing.length;
+      summary.possibleDuplicates=classified.possibleDuplicates.length;
+      summary.requiresReview=classified.requiresReview.length;
+      for(const entry of classified.insertable){
+        const group=entry.group;
+        const payments=getTicketPayments(group);
+        if(!(group.rows||[]).length || !payments.length){
+          summary.requiresReview++;
+          summary.details.push({legacyId:entry.local.legacyId,status:'requires_review',reason:'Sin items o pagos reconstruibles'});
+          continue;
+        }
+        try{
+          const res=await saveMissingSaleGroupToSupabaseStrict(group,entry.local);
+          if(res?.ok){
+            summary.inserted++;
+            summary.itemsInserted+=res.itemsInserted||0;
+            summary.paymentsInserted+=res.paymentsInserted||0;
+            summary.details.push({legacyId:entry.local.legacyId,status:'inserted',saleId:res.saleId||''});
+          }else if(res?.skipped){
+            summary.existing++;
+            summary.details.push({legacyId:entry.local.legacyId,status:'existing',reason:res.reason||'Ya existe en Supabase',saleId:res.saleId||''});
+          }else{
+            summary.requiresReview++;
+            summary.details.push({legacyId:entry.local.legacyId,status:'requires_review',reason:'El insert estricto no confirmó ok'});
+          }
+        }catch(err){
+          summary.errors++;
+          summary.details.push({legacyId:entry.local.legacyId,status:'error',message:err?.message||String(err),code:err?.code||'',details:err?.details||'',hint:err?.hint||''});
+        }
+      }
+      refreshSalesDiagnostics({silent:true}).catch(()=>{});
+      refreshHistoryAndDashboard({reason:'recovery_resync',force:true});
+      console.log('[Recovery resync summary]',summary);
+      showToast(`Recuperación: ${summary.inserted} venta(s) insertada(s), ${summary.possibleDuplicates} posible(s) duplicado(s), ${summary.errors} error(es).`,4200);
+      return summary;
+    }catch(err){
+      console.error('[Recovery resync failed]',{message:err?.message||String(err),code:err?.code||'',details:err?.details||'',hint:err?.hint||''});
+      showToast('No pudimos reintentar la sincronización local.');
+      return null;
+    }
   };
   window.autoRetryPendingSalesSync=async function({force=false,reason='auto'}={}){
     if(salesAutoSyncRunning) return {ok:false,reason:'running'};
