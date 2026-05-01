@@ -2720,12 +2720,25 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
       if(!esReserva&&window.checkOpenOrderStillOpen){
         const mesaChk=findMesaByAnyId(mesaActivaId);
         if(!mesaChk){showToast('No pudimos cargar esta mesa. Reintentá.');return;}
-        if(mesaChk?._sb_id){
-          const stillOpen=await cajaWithTimeout(window.checkOpenOrderStillOpen(mesaChk._sb_id).catch(()=>true),'check_open_order',10000);
-          if(stillOpen===false){
-            showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
-            removeMesaByAnyId(mesaActivaId);save();renderVentas();return;
-          }
+        if(!mesaChk?._sb_id){
+          showToast('No pudimos confirmar el estado de la mesa. Reintentá en unos segundos.');
+          return;
+        }
+        let stillOpen=null;
+        try{
+          stillOpen=await cajaWithTimeout(window.checkOpenOrderStillOpen(mesaChk._sb_id),'check_open_order',10000);
+        }catch(err){
+          if(window.canShowClientTechnicalUi?.())console.warn('[Caja] check open_order failed before payment',err);
+          showToast('No pudimos confirmar el estado de la mesa. Reintentá en unos segundos.');
+          return;
+        }
+        if(stillOpen===false){
+          showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
+          removeMesaByAnyId(mesaActivaId);save();renderVentas();return;
+        }
+        if(stillOpen!==true){
+          showToast('No pudimos confirmar el estado de la mesa. Reintentá en unos segundos.');
+          return;
         }
       }
       const totalVenta=money2(carritoTotalFn(carrito));
@@ -5269,7 +5282,7 @@ if(config.webappUrl){loadFromSheets();}
   // ── Anti-double-cobro: chequear si sigue abierta ──
   async function checkOpenOrderStillOpen(sbId){
     const client=ooClient(),storeId=ooStoreId();
-    if(!client||!storeId||!sbId)return true; // sin Supabase: asumir abierta
+    if(!client||!storeId||!sbId)return null;
     try{
       const{data,error}=await client
         .from('open_orders')
@@ -5277,10 +5290,21 @@ if(config.webappUrl){loadFromSheets();}
         .eq('id',sbId)
         .eq('store_id',storeId)
         .maybeSingle();
-      if(error)return true;          // error de red: asumir abierta
+      if(error)throw error;
       if(!data)return false;         // no existe → ya fue cobrada
       return data.status==='open';
-    }catch{return true;}
+    }catch(err){
+      ooRememberError(err,{table:'open_orders',operation:'check_open_before_payment',query:'select id,status by id/store_id',store_id:storeId});
+      if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] check still open failed:',{
+        code:err?.code||'',
+        message:err?.message||String(err)||'',
+        details:err?.details||'',
+        hint:err?.hint||'',
+        open_order_id:sbId,
+        store_id:storeId
+      });
+      return null;
+    }
   }
 
   // ── Diagnósticos en modo técnico ──────────────────
