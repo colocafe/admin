@@ -2798,23 +2798,47 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
       ventas.push(...nuevas);
       ventaLocalCreada=true;
       if(turnoActivo)turnoActivo.ventasIds=[...(turnoActivo.ventasIds||[]),...ventaIds];
+      save();
+      let salesSync=null;
+      try{
+        if(!window.saveSaleRowsToSupabase) throw new Error('No hay guardado de ventas disponible');
+        salesSync=await cajaWithTimeout(window.saveSaleRowsToSupabase(nuevas),'save_sale_supabase_readback',22000);
+        if(!salesSync?.ok) throw new Error('No pudimos confirmar la venta guardada');
+      }catch(err){
+        console.error('[Caja] venta no confirmada en base',{
+          code:err?.code||'',
+          message:err?.message||String(err)||'',
+          details:err?.details||'',
+          hint:err?.hint||'',
+          ticket_id:ticketId,
+          open_order_id:_openOrderSbId,
+          reservation_id:reservaActiva?._sb_id||reservaActiva?.id||null
+        });
+        if(esReserva&&reservaOptimisticHidden&&reservasBeforeCobro){
+          reservas=reservasBeforeCobro;
+          clearReservationHidden(reservaOptimisticHidden);
+          save();renderReservasSection();
+        }
+        showToast('No pudimos guardar la venta. No cierres la app y avisá al administrador.');
+        renderVentas();
+        return;
+      }
       if(esReserva&&reservaActiva){
         reservaActiva.estado='pagada';reservaActiva.pago=paymentState.pago;reservaActiva.payment_mode=paymentState.payment_mode;reservaActiva.pagos=paymentState.pagos;
+        markReservationHidden(reservaActiva,'payment');
       }else{
         const mesaCobrada=findMesaByAnyId(mesaActivaId);
+        if(mesaCobrada?._sb_id){
+          try{
+            await cajaWithTimeout(window.deleteOpenOrderFromSupabase?.(mesaCobrada._sb_id),'close_open_order_after_sale',10000);
+          }catch(err){
+            if(window.canShowClientTechnicalUi?.())console.warn('[Caja] venta guardada pero mesa no se cerró en base',err);
+          }
+        }
         removeMesaByAnyId(mesaActivaId);
-        if(mesaCobrada?._sb_id)window.deleteOpenOrderFromSupabase?.(mesaCobrada._sb_id).catch(()=>{});
       }
       save();if(esReserva)syncReservasSheets();else syncMesasSheets();if(turnoActivo&&turno===turnoActivo)syncTurnoSheets();
-      const ok=await cajaWithTimeout(syncVentasSheets(nuevas),'sync_ventas_sheets',10000).catch(()=>false);
-      showToast(ok?'✓ Venta guardada en Sheets':(config.webappUrl?'✓ Registrada (sin internet)':'✓ Venta registrada'));
-      try{
-        const salesSync=await cajaWithTimeout(window.saveSaleRowsToSupabase?.(nuevas),'save_sale_supabase',12000);
-        if(salesSync?.ok)showToast('✓ Venta guardada');
-      }catch(err){
-        if(window.canShowClientTechnicalUi?.())console.warn('[Caja] venta local creada, Supabase sales falló',err);
-        showToast('Venta registrada. Se actualizará cuando vuelva la conexión.');
-      }
+      cajaWithTimeout(syncVentasSheets(nuevas),'sync_ventas_sheets',10000).catch(err=>window.canShowClientTechnicalUi?.()&&console.warn('[Caja] Sheets falló después de confirmar venta',err));
       if(esReserva&&reservaActiva&&window.saveReservationToSupabase){
         try{
           await cajaWithTimeout(window.saveReservationToSupabase(reservaActiva),'close_reservation_supabase',10000);
@@ -2823,9 +2847,11 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
         }catch(err){
           if(window.canShowClientTechnicalUi?.())console.warn('[Caja] venta creada pero reserva no se actualizó en Supabase',err);
         }
+      }else{
+        showToast('✓ Venta guardada');
       }
       renderVentas();
-    })(),'ejecutar_cobro',15000);
+    })(),'ejecutar_cobro',30000);
   }catch(err){
     if(window.canShowClientTechnicalUi?.())console.error('[Caja] ejecutarCobro failed',err);
     if(esReserva&&reservaOptimisticHidden&&!ventaLocalCreada&&reservasBeforeCobro){
@@ -5454,6 +5480,15 @@ if(config.webappUrl){loadFromSheets();}
         .maybeSingle();
       if(error)throw error;
       if(!data)return false;         // no existe → ya fue cobrada
+      if(data.status==='open'){
+        const saleCheck=await client
+          .from('sales')
+          .select('id',{count:'exact',head:true})
+          .eq('store_id',storeId)
+          .eq('open_order_id',sbId);
+        if(saleCheck.error) throw Object.assign(saleCheck.error,{_salesOp:'check_sale_for_open_order',_salesTable:'sales'});
+        if((Number(saleCheck.count)||0)>0) return false;
+      }
       return data.status==='open';
     }catch(err){
       ooRememberError(err,{table:'open_orders',operation:'check_open_before_payment',query:'select id,status by id/store_id',store_id:storeId});
@@ -9913,6 +9948,80 @@ if(config.webappUrl){loadFromSheets();}
       hint:err?.hint||''
     });
   }
+  function salesErrorSummary(err){
+    return{
+      code:err?.code||'',
+      message:err?.message||String(err)||'',
+      details:err?.details||'',
+      hint:err?.hint||'',
+      table:err?._salesTable||'',
+      operation:err?._salesOp||''
+    };
+  }
+  function logSalesWriteAttempt(stage,details={}){
+    const payload={
+      stage,
+      operation:details.operation||details.sourceKind||'venta',
+      store_id:details.storeId||getSalesStoreId(),
+      user_id:details.session?.user?.id||supabaseUser?.id||'',
+      user_email:details.session?.user?.email||supabaseUser?.email||'',
+      role:getSalesRole()||'',
+      business_date:details.salePayload?.business_date||'',
+      sold_at:details.salePayload?.sold_at||'',
+      total_amount:details.salePayload?.total_amount??null,
+      legacy_id:details.salePayload?.legacy_id||details.legacyId||'',
+      open_order_id:details.salePayload?.open_order_id||null,
+      reservation_id:details.salePayload?.reservation_id||null,
+      sales:details.salePayload||null,
+      sale_items:details.itemsPayload||null,
+      sale_payments:details.paymentsPayload||null,
+      sales_result:details.saleResult||null,
+      items_result:details.itemsResult||null,
+      payments_result:details.paymentsResult||null,
+      read_back:details.readBack||null,
+      error:details.error?salesErrorSummary(details.error):null
+    };
+    if(details.error) console.error('[Sales write]',payload);
+    else if(window.canShowClientTechnicalUi?.()) console.log('[Sales write]',payload);
+  }
+  function makeSalesReadBackError(message,meta={}){
+    const err=new Error(message);
+    Object.assign(err,meta);
+    return err;
+  }
+  async function verifySaleGroupReadBack(client,storeId,group,saleId){
+    const legacyId=getStableSaleLegacyId(group);
+    const saleQuery=saleId
+      ? client.from('sales').select('id,legacy_id,total_amount,business_date,sold_at').eq('id',saleId).eq('store_id',storeId).maybeSingle()
+      : client.from('sales').select('id,legacy_id,total_amount,business_date,sold_at').eq('store_id',storeId).eq('legacy_id',legacyId).maybeSingle();
+    const saleRes=await saleQuery;
+    if(saleRes.error) throw Object.assign(saleRes.error,{_salesOp:'read_back_sale',_salesTable:'sales'});
+    if(!saleRes.data) throw makeSalesReadBackError('No pudimos confirmar la venta guardada',{_salesOp:'read_back_sale',_salesTable:'sales',code:'READ_BACK_MISSING_SALE',legacyId,saleId});
+    const confirmedSaleId=saleRes.data.id;
+    const expectedItems=(group.rows||[]).length;
+    const expectedPayments=(group.payments&&group.payments.length?group.payments:getTicketPayments(group)).length;
+    const itemsRes=await client.from('sale_items').select('id',{count:'exact',head:true}).eq('store_id',storeId).eq('sale_id',confirmedSaleId);
+    if(itemsRes.error) throw Object.assign(itemsRes.error,{_salesOp:'read_back_items',_salesTable:'sale_items'});
+    const paymentsRes=await client.from('sale_payments').select('id',{count:'exact',head:true}).eq('store_id',storeId).eq('sale_id',confirmedSaleId);
+    if(paymentsRes.error) throw Object.assign(paymentsRes.error,{_salesOp:'read_back_payments',_salesTable:'sale_payments'});
+    const readBack={
+      saleId:confirmedSaleId,
+      legacyId:saleRes.data.legacy_id||legacyId,
+      expectedItems,
+      itemCount:Number(itemsRes.count)||0,
+      expectedPayments,
+      paymentCount:Number(paymentsRes.count)||0
+    };
+    if(readBack.itemCount<expectedItems || readBack.paymentCount<expectedPayments){
+      throw makeSalesReadBackError('No pudimos confirmar el detalle completo de la venta',{
+        _salesOp:'read_back_counts',
+        _salesTable:'sales',
+        code:'READ_BACK_INCOMPLETE_SALE',
+        readBack
+      });
+    }
+    return readBack;
+  }
   async function saveSalesRowManual(client,table,storeId,payload,selectColumns='id,legacy_id'){
     let existingRow=null;
     try{
@@ -10616,13 +10725,18 @@ if(config.webappUrl){loadFromSheets();}
     salesLastTicket=getStableSaleLegacyId(group);
     setSalesWriteState('syncing');
     let saleId=null;
-    console.group('[Sales -> Supabase]');
-    console.log('group',group);
+    let salePayload=null;
+    let itemsPayload=[];
+    let paymentsPayload=[];
+    let saleData=null;
+    let itemsData=[];
+    let paymentsData=[];
+    let readBack=null;
     try{
       const existingRow=await findExistingSaleRow(client,storeId,group);
-      const salePayload=await mapSaleGroupToSupabaseSale(group,{client,storeId,cache:relationCache});
-      console.log('sale payload',salePayload);
-      const saleData=existingRow
+      salePayload=await mapSaleGroupToSupabaseSale(group,{client,storeId,cache:relationCache});
+      logSalesWriteAttempt('start',{operation:salePayload?.metadata?.source_kind||'venta',storeId,session,salePayload,legacyId:salesLastTicket});
+      saleData=existingRow
         ? await (async()=>{
             try{
               const res=await client.from('sales').update(salePayload).eq('id',existingRow.id).eq('store_id',storeId).select('id,legacy_id').single();
@@ -10634,24 +10748,19 @@ if(config.webappUrl){loadFromSheets();}
             }
           })()
         : await saveSalesRowManual(client,'sales',storeId,salePayload,'id,legacy_id');
-      console.log('sale result',saleData);
       saleId=saleData.id;
-      const itemsPayload=await Promise.all((group.rows||[]).map(row=>mapSaleItemToSupabaseItem(row,saleId,{client,storeId,cache:relationCache})));
-      console.log('items payload',itemsPayload);
-      const itemsData=[];
+      itemsPayload=await Promise.all((group.rows||[]).map(row=>mapSaleItemToSupabaseItem(row,saleId,{client,storeId,cache:relationCache})));
       for(const itemPayload of itemsPayload){
         const itemData=await saveSalesRowManual(client,'sale_items',storeId,itemPayload,'id,legacy_id');
         itemsData.push(itemData);
       }
-      console.log('items result',itemsData);
-      const paymentsPayload=(group.payments||[]).map((payment,index)=>mapSalePaymentToSupabasePayment(payment,saleId,group,index));
-      console.log('payments payload',paymentsPayload);
-      const paymentsData=[];
+      paymentsPayload=(group.payments&&group.payments.length?group.payments:getTicketPayments(group)).map((payment,index)=>mapSalePaymentToSupabasePayment(payment,saleId,group,index));
       for(const paymentPayload of paymentsPayload){
         const paymentData=await saveSalesRowManual(client,'sale_payments',storeId,paymentPayload,'id,legacy_id');
         paymentsData.push(paymentData);
       }
-      console.log('payments result',paymentsData);
+      readBack=await verifySaleGroupReadBack(client,storeId,group,saleId);
+      logSalesWriteAttempt('read_back_ok',{operation:salePayload?.metadata?.source_kind||'venta',storeId,session,salePayload,itemsPayload,paymentsPayload,saleResult:saleData,itemsResult:itemsData,paymentsResult:paymentsData,readBack});
       markLocalSaleRowsSync(group.rows,{saleId,status:'synced',error:''});
       salesLastSyncAt=stampSalesMoment();
       setSalesWriteState('ready');
@@ -10662,20 +10771,12 @@ if(config.webappUrl){loadFromSheets();}
       if(window.reloadDashboardFromSupabase){
         setTimeout(()=>window.reloadDashboardFromSupabase({silent:true,forceRefresh:true}),0);
       }
-      console.groupEnd();
-      return{ok:true,saleId,legacyId:saleData.legacy_id||salesLastTicket};
+      return{ok:true,saleId,legacyId:saleData.legacy_id||salesLastTicket,readBack};
     }catch(err){
       err._sb_sync_status=saleId?'partial_error':'error';
-      console.error('sale result/error',{
-        message:err?.message||String(err),
-        code:err?.code||'',
-        details:err?.details||'',
-        hint:err?.hint||'',
-        policyHint:inferSalesPolicyMessage(err)
-      });
+      logSalesWriteAttempt('error',{operation:salePayload?.metadata?.source_kind||'venta',storeId,session,salePayload,itemsPayload,paymentsPayload,saleResult:saleData,itemsResult:itemsData,paymentsResult:paymentsData,readBack:err?.readBack||null,error:err});
       markLocalSaleRowsSync(group.rows,{saleId:saleId||null,status:saleId?'partial_error':'error',error:err?.message||String(err)});
       setSalesWriteState('error',err?.message||String(err));
-      console.groupEnd();
       throw err;
     }
   };
@@ -10819,6 +10920,7 @@ if(config.webappUrl){loadFromSheets();}
     const backup=window.__localRecoveryLastBackup||null;
     const diag=state.diagnosticSummary||null;
     const resync=state.resyncSummary||null;
+    const salesTest=state.salesWriteTest||null;
     const error=state.error||'';
     host.innerHTML=`
       ${backup?`<div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:10px;line-height:1.5">
@@ -10838,6 +10940,11 @@ if(config.webappUrl){loadFromSheets();}
         Insertadas: ${resync.inserted} · omitidas: ${resync.existing} · posibles duplicados: ${resync.possibleDuplicates}<br>
         Requiere revisión: ${resync.requiresReview} · errores: ${resync.errors}<br>
         Items insertados: ${resync.itemsInserted} · pagos insertados: ${resync.paymentsInserted}
+      </div>`:''}
+      ${salesTest?`<div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:10px;line-height:1.55">
+        <strong>Última prueba de guardado</strong><br>
+        Venta: ${salesTest.salesOk?'OK':'Error'} · Items: ${salesTest.itemsOk?'OK':'Error'} · Pagos: ${salesTest.paymentsOk?'OK':'Error'} · Lectura: ${salesTest.readBackOk?'OK':'Error'}<br>
+        ${salesTest.error?`<span style="color:var(--red)">Error: ${escapeHtml(salesTest.error)}</span>`:`ID prueba: ${escapeHtml(salesTest.legacyId||'')}`}
       </div>`:''}
       ${error?`<div style="color:var(--red);background:rgba(176,48,48,.08);border:1px solid rgba(176,48,48,.18);border-radius:10px;padding:10px">${escapeHtml(error)}</div>`:''}
       ${state.showBackupText&&backup?`<div style="display:grid;gap:8px">
@@ -11740,6 +11847,21 @@ commit;`;
       }).select('id').single();
       if(paymentInsert.error) throw paymentInsert.error;
       paymentId=paymentInsert.data.id;
+      const saleRead=await client.from('sales').select('id,legacy_id').eq('id',saleId).eq('store_id',storeId).maybeSingle();
+      if(saleRead.error) throw saleRead.error;
+      const itemsRead=await client.from('sale_items').select('id',{count:'exact',head:true}).eq('store_id',storeId).eq('sale_id',saleId);
+      if(itemsRead.error) throw itemsRead.error;
+      const paymentsRead=await client.from('sale_payments').select('id',{count:'exact',head:true}).eq('store_id',storeId).eq('sale_id',saleId);
+      if(paymentsRead.error) throw paymentsRead.error;
+      const testSummary={
+        salesOk:!!saleRead.data,
+        itemsOk:(Number(itemsRead.count)||0)>=1,
+        paymentsOk:(Number(paymentsRead.count)||0)>=1,
+        readBackOk:!!saleRead.data&&(Number(itemsRead.count)||0)>=1&&(Number(paymentsRead.count)||0)>=1,
+        legacyId:token,
+        error:''
+      };
+      setRecoveryUiState?.({salesWriteTest:testSummary,error:''});
       const paymentUpdate=await client.from('sale_payments').update({amount:2}).eq('id',paymentInsert.data.id).eq('store_id',storeId).select('id').single();
       if(paymentUpdate.error) throw paymentUpdate.error;
       const saleUpdate=await client.from('sales').update({notes:'debug ok'}).eq('id',saleId).eq('store_id',storeId).select('id').single();
@@ -11759,9 +11881,17 @@ commit;`;
         salePaymentsUpdateOk:true,
         salesUpdateOk:true
       });
-      showToast('Permisos write sales OK');
+      showToast('Probar guardado de venta OK');
     }catch(err){
       const schemaHint=inferSalesSchemaCacheMessage(err);
+      setRecoveryUiState?.({salesWriteTest:{
+        salesOk:!!saleId,
+        itemsOk:!!itemId,
+        paymentsOk:!!paymentId,
+        readBackOk:false,
+        legacyId:'',
+        error:`${err?.code?err.code+' · ':''}${err?.message||String(err)}`
+      }});
       console.error('[Sales debug permissions failed]',{
         message:err?.message||String(err),
         code:err?.code||'',
