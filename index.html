@@ -740,6 +740,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
           <button class="btn-sm primary" onclick="openProdRapidoModal()" style="font-size:11px;padding:5px 10px">+ Producto</button>
         </div>
         <div class="cat-chips" id="carga-cats"></div>
+        <input class="inv-search" id="carga-prod-search" type="search" placeholder="Buscar producto…" oninput="renderProdGrid()" style="margin-bottom:10px">
         <div class="prod-grid" id="prod-grid"></div>
       </div>
       <div class="carga-right">
@@ -754,13 +755,11 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
           <div class="pago-lbl">Forma de pago</div>
           <div class="pago-grid">
             <div class="pago-opt active" id="popt-ef" onclick="setPago('ef')">Efectivo</div>
-            <div class="pago-opt" id="popt-mp" onclick="setPago('mp')">Mercado Pago</div>
             <div class="pago-opt" id="popt-tr" onclick="setPago('transferencia')">Transferencia</div>
-            <div class="pago-opt" id="popt-mixed" onclick="setPago('mixed')">Pago mixto</div>
+            <div class="pago-opt" id="popt-mixed" onclick="setPago('mixed')" style="grid-column:1/-1">Pago mixto</div>
           </div>
           <div class="pago-mixed-box" id="mixed-payments-box">
             <div class="pago-mixed-row"><span>Efectivo</span><input id="mpay-efectivo" type="number" min="0" step="0.01" placeholder="0" oninput="setMixedPaymentValue('efectivo',this.value)"></div>
-            <div class="pago-mixed-row"><span>Mercado Pago</span><input id="mpay-mercado_pago" type="number" min="0" step="0.01" placeholder="0" oninput="setMixedPaymentValue('mercado_pago',this.value)"></div>
             <div class="pago-mixed-row"><span>Transferencia</span><input id="mpay-transferencia" type="number" min="0" step="0.01" placeholder="0" oninput="setMixedPaymentValue('transferencia',this.value)"></div>
             <div class="pago-mixed-status" id="mixed-payments-status"></div>
           </div>
@@ -1171,7 +1170,6 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <select class="modal-select" id="res-estado">
           <option value="pendiente">Pendiente</option>
           <option value="confirmada">Confirmada</option>
-          <option value="pagada">Pagada</option>
           <option value="cancelada">Cancelada</option>
         </select>
       </div>
@@ -1179,6 +1177,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
     <!-- Productos múltiples -->
     <div class="modal-field">
       <label class="modal-lbl">Productos reservados</label>
+      <input class="inv-search" id="res-prod-search" type="search" placeholder="Buscar producto…" oninput="renderReservaProductoGrid()" style="margin-bottom:8px">
       <div id="res-prod-chips" class="cat-chips" style="margin-bottom:8px"></div>
       <div class="prod-grid" id="res-prod-grid" style="max-height:240px;overflow-y:auto"></div>
     </div>
@@ -1200,7 +1199,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
       <div class="pago-lbl" style="margin-top:10px">Forma de pago</div>
       <div class="pago-grid">
         <div class="pago-opt active" id="rpopt-ef" onclick="setReservaPago('ef')">Efectivo</div>
-        <div class="pago-opt" id="rpopt-mp" onclick="setReservaPago('mp')">Mercado Pago</div>
+        <div class="pago-opt" id="rpopt-tr" onclick="setReservaPago('transferencia')">Transferencia</div>
       </div>
     </div>
     <div id="reserva-modal-actions" class="modal-actions"></div>
@@ -1490,6 +1489,7 @@ const PAYMENT_METHODS=[
   {key:'transferencia',legacy:'transferencia',label:'Transferencia',short:'Transf.',color:'var(--blue)'},
   {key:'otro',legacy:'otro',label:'Otro',short:'Otro',color:'var(--ink3)'}
 ];
+const ACTIVE_PAYMENT_METHOD_KEYS=['efectivo','transferencia'];
 function emptyMixedPayments(){return{efectivo:'',mercado_pago:'',transferencia:'',otro:''};}
 let carrito={},pago='ef',paymentMode='single',mixedPayments=emptyMixedPayments(),catCarga='todos',editId=null;
 let editClienteId=null,editReservaId=null,activeTab='carga';
@@ -1505,6 +1505,7 @@ let confirmCallback=null,activeMenuTab='cats',ventasFiltroTipo='todos';
 let _variantesEdit=[],pendingCobroCallback=null;
 // Snapshot of reserva modal data when opening cliente modal from it
 let reservaSnapshot=null;
+window.__reservationChargeAfterSave=false;
 
 function save(){
   localStorage.setItem('cats',    JSON.stringify(cats));
@@ -1650,6 +1651,13 @@ function normalizePaymentMethod(method){
   if(method==='mixed'||method==='mixto')return'mixed';
   return method||'efectivo';
 }
+function normalizeNewPaymentMethod(method){
+  const normalized=normalizePaymentMethod(method);
+  return normalized==='mercado_pago'?'transferencia':normalized;
+}
+function getActivePaymentMethods(){
+  return PAYMENT_METHODS.filter(m=>ACTIVE_PAYMENT_METHOD_KEYS.includes(m.key));
+}
 function normalizePaymentMode(mode,pagos){return mode==='mixed'||(Array.isArray(pagos)&&pagos.length>1)?'mixed':'single';}
 function getPaymentMethodMeta(method){return PAYMENT_METHODS.find(x=>x.key===normalizePaymentMethod(method))||PAYMENT_METHODS[3];}
 function getLegacyPagoValue(method){return getPaymentMethodMeta(method).legacy;}
@@ -1681,7 +1689,7 @@ function parsePaymentAmount(value){
   const n=parseFloat(String(value??'').replace(',','.'));
   return Number.isFinite(n)&&n>0?money2(n):0;
 }
-function getDraftMixedPayments(){return PAYMENT_METHODS.map(m=>({metodo:m.key,monto:parsePaymentAmount(mixedPayments[m.key])})).filter(p=>p.monto>0);}
+function getDraftMixedPayments(){return getActivePaymentMethods().map(m=>({metodo:m.key,monto:parsePaymentAmount(mixedPayments[m.key])})).filter(p=>p.monto>0);}
 function getCurrentVentaTarget(){
   if(!mesaActivaId)return null;
   return mesaActivaId.startsWith('reserva_')?reservas.find(x=>x.id===mesaActivaId.replace('reserva_','')):findMesaByAnyId(mesaActivaId);
@@ -1695,15 +1703,18 @@ function persistCurrentPaymentSelection(){
   save();
 }
 function loadPaymentState(source){
-  pago=source?.pago||'ef';
+  pago=normalizeNewPaymentMethod(source?.pago||'ef');
   paymentMode=normalizePaymentMode(source?.payment_mode,source?.pagos);
   mixedPayments=emptyMixedPayments();
-  normalizeStoredPayments(source?.pagos).forEach(p=>{mixedPayments[p.metodo]=String(p.monto);});
+  normalizeStoredPayments(source?.pagos).forEach(p=>{
+    const method=normalizeNewPaymentMethod(p.metodo);
+    mixedPayments[method]=String(money2((parsePaymentAmount(mixedPayments[method])||0)+p.monto));
+  });
   updatePaymentUI();
 }
 function getCurrentPaymentState(total=money2(carritoTotalFn(carrito))){
   if(paymentMode!=='mixed'){
-    const metodo=normalizePaymentMethod(pago||'ef');
+    const metodo=normalizeNewPaymentMethod(pago||'ef');
     return{payment_mode:'single',pago:getLegacyPagoValue(metodo),pagos:[{metodo,monto:money2(total)}],asignado:money2(total),diferencia:0,valido:total>0,mensaje:''};
   }
   const pagos=getDraftMixedPayments(),asignado=money2(pagos.reduce((s,p)=>s+p.monto,0)),diferencia=money2(total-asignado);
@@ -1718,9 +1729,10 @@ function getCurrentPaymentState(total=money2(carritoTotalFn(carrito))){
 }
 function updatePaymentUI(total=money2(carritoTotalFn(carrito)),state=getCurrentPaymentState(total)){
   const ids={ef:'popt-ef',mp:'popt-mp',transferencia:'popt-tr',otro:'popt-otro',mixed:'popt-mixed'};
-  Object.entries(ids).forEach(([key,id])=>{const el=$(id);if(el)el.className='pago-opt'+((paymentMode==='mixed'&&key==='mixed')||(paymentMode==='single'&&pago===key)?' active':'');});
+  const activePagoKey=normalizeNewPaymentMethod(pago)==='efectivo'?'ef':normalizeNewPaymentMethod(pago);
+  Object.entries(ids).forEach(([key,id])=>{const el=$(id);if(el)el.className='pago-opt'+((paymentMode==='mixed'&&key==='mixed')||(paymentMode==='single'&&activePagoKey===key)?' active':'');});
   const box=$('mixed-payments-box');if(box)box.style.display=paymentMode==='mixed'?'block':'none';
-  PAYMENT_METHODS.forEach(m=>{const input=$(`mpay-${m.key}`);if(input&&input.value!==String(mixedPayments[m.key]??''))input.value=String(mixedPayments[m.key]??'');});
+  getActivePaymentMethods().forEach(m=>{const input=$(`mpay-${m.key}`);if(input&&input.value!==String(mixedPayments[m.key]??''))input.value=String(mixedPayments[m.key]??'');});
   const status=$('mixed-payments-status');
   if(status){
     if(paymentMode!=='mixed'||total<=0){status.style.display='none';status.textContent='';}
@@ -2570,6 +2582,7 @@ async function abrirMesa(id){
     }
   }
   mesaActivaId=openId;carrito={};
+  const search=$('carga-prod-search');if(search)search.value='';
   setCajaNavEvent('open_detail');
   Object.entries(m.items||{}).forEach(([k,v])=>{carrito[k]={...v};});
   $('mesa-titulo').textContent=m.nombre;
@@ -2582,6 +2595,7 @@ function abrirReservaComoVenta(id){
   const r=reservas.find(x=>sameId(x.id,id));if(!r)return;
   if(!isReservationVisibleInCaja(r)){showToast('Esta reserva ya no está disponible.');renderReservasSection();return;}
   mesaActivaId='reserva_'+id;carrito={};
+  const search=$('carga-prod-search');if(search)search.value='';
   setCajaNavEvent('open_reservation');
   (r.items||[]).forEach((item,i)=>{carrito[`res_${i}`]={...item};});
   $('mesa-titulo').textContent=r.nombre;
@@ -2887,7 +2901,13 @@ function renderProdGrid(){
     return;
   }
   const activeMenu=(menu||[]).filter(p=>p.active!==false);
-  const list=catCarga==='todos'?activeMenu:activeMenu.filter(p=>p.cat===catCarga);
+  const q=($('carga-prod-search')?.value||'').trim().toLowerCase();
+  const byCat=catCarga==='todos'?activeMenu:activeMenu.filter(p=>p.cat===catCarga);
+  const list=byCat.filter(p=>{
+    if(!q)return true;
+    const cat=getCat(p.cat);
+    return String(p.name||'').toLowerCase().includes(q)||String(cat?.name||'').toLowerCase().includes(q);
+  });
   if(!list.length){el.innerHTML='<div class="empty">No hay productos</div>';return;}
   el.innerHTML=list.map(p=>{
     const productId=getProductFrontId(p);
@@ -2963,7 +2983,7 @@ function renderCart(){
 }
 function setPago(t){
   if(t==='mixed')paymentMode='mixed';
-  else{paymentMode='single';pago=t;}
+  else{paymentMode='single';pago=normalizeNewPaymentMethod(t);}
   persistCurrentPaymentSelection();
   renderCart();
 }
@@ -3023,7 +3043,27 @@ function popularClienteSelectReserva(selId){
   sel.innerHTML=`<option value="">Sin cliente</option>`+clientes.map(c=>`<option value="${c.id}"${c.id===selId?' selected':''}>${c.nombre}</option>`).join('');
 }
 function selReservaTipo(t){tipoNuevaMesaReserva=t;['salon','delivery','takeaway'].forEach(x=>{$(`rtipo-btn-${x}`).className=`tipo-btn${x===t?' sel-'+x:''}`;});}
-function setReservaPago(t){reservaPago=t;$('rpopt-ef').className='pago-opt'+(t==='ef'?' active':'');$('rpopt-mp').className='pago-opt'+(t==='mp'?' active':'');}
+function setReservaPago(t){
+  reservaPago=normalizeNewPaymentMethod(t);
+  const ef=$('rpopt-ef'),tr=$('rpopt-tr');
+  if(ef)ef.className='pago-opt'+(reservaPago==='efectivo'||reservaPago==='ef'?' active':'');
+  if(tr)tr.className='pago-opt'+(reservaPago==='transferencia'?' active':'');
+}
+function getEditableReservationStatus(status){
+  const normalized=normalizeReservaStatus(status);
+  if(['cancelled','canceled','cancelado'].includes(normalized))return'cancelada';
+  if(['confirmed','confirmado'].includes(normalized))return'confirmada';
+  return RESERVA_INACTIVE_STATUSES.has(normalized)&&normalized!=='cancelada'&&normalized!=='cancelado'&&normalized!=='cancelled'&&normalized!=='canceled'
+    ? 'pendiente'
+    : (normalized||'pendiente');
+}
+function renderReservaModalActions(id=null){
+  const deleteBtn=id?`<button class="btn-cancel" type="button" onclick="pedirEliminarReserva('${escapeJsArg(id)}')">Eliminar</button>`:`<button class="btn-cancel" type="button" onclick="cerrarModalReserva()">Cancelar</button>`;
+  $('reserva-modal-actions').innerHTML=`
+    ${deleteBtn}
+    <button class="btn-save" type="button" onclick="guardarReserva('save')">Guardar reserva</button>
+    <button class="btn-save" type="button" onclick="guardarReserva('charge')" style="grid-column:1/-1;background:var(--green)">Cobrar reserva ahora</button>`;
+}
 
 function openReservaModal(id){
   editReservaId=id;tipoNuevaMesaReserva='salon';reservaCarrito={};catReserva='todos';
@@ -3035,16 +3075,18 @@ function openReservaModal(id){
     tipoNuevaMesaReserva=r.tipo||'salon';
     ['salon','delivery','takeaway'].forEach(t=>{$(`rtipo-btn-${t}`).className=`tipo-btn${t===tipoNuevaMesaReserva?' sel-'+t:''}`;});
     $('res-nombre').value=r.nombre||'';popularClienteSelectReserva(r.clienteId);
-    $('res-fecha').value=r.fecha||'';$('res-estado').value=r.estado||'pendiente';
+    $('res-fecha').value=r.fecha||'';$('res-estado').value=getEditableReservationStatus(r.estado||'pendiente');
     $('res-nota').value=r.nota||'';
+    const search=$('res-prod-search');if(search)search.value='';
     (r.items||[]).forEach((item,i)=>{reservaCarrito[`ri_${i}`]={...item};});
     $('reserva-modal-titulo').textContent='Editar reserva';
-    $('reserva-modal-actions').innerHTML=`<button class="btn-cancel" type="button" onclick="pedirEliminarReserva('${id}')">Eliminar</button><button class="btn-save" type="button" onclick="guardarReserva()">Guardar</button>`;
+    renderReservaModalActions(id);
   }else{
     $('reserva-modal-titulo').textContent='Nueva reserva';
     ['res-nombre','res-nota'].forEach(fid=>$(fid).value='');
+    const search=$('res-prod-search');if(search)search.value='';
     $('res-fecha').value=today();$('res-estado').value='pendiente';$('res-cliente').value='';
-    $('reserva-modal-actions').innerHTML=`<button class="btn-cancel" type="button" onclick="cerrarModalReserva()">Cancelar</button><button class="btn-save" type="button" onclick="guardarReserva()">Guardar</button>`;
+    renderReservaModalActions(null);
   }
   renderReservaProductoGrid();renderReservaProdChips();renderReservaCarrito();
   $('modal-reserva').classList.add('open');
@@ -3055,7 +3097,8 @@ function captureReservaSnapshot(){
   return{
     editReservaId,tipoNuevaMesaReserva,reservaCarrito:{...reservaCarrito},catReserva,
     nombre:$('res-nombre')?.value||'',clienteId:$('res-cliente')?.value||'',
-    fecha:$('res-fecha')?.value||'',estado:$('res-estado')?.value||'pendiente',
+    fecha:$('res-fecha')?.value||'',estado:getEditableReservationStatus($('res-estado')?.value||'pendiente'),
+    search:$('res-prod-search')?.value||'',
     nota:$('res-nota')?.value||''
   };
 }
@@ -3066,8 +3109,10 @@ function restoreReservaSnapshot(snap){
   ['salon','delivery','takeaway'].forEach(t=>{$(`rtipo-btn-${t}`).className=`tipo-btn${t===tipoNuevaMesaReserva?' sel-'+t:''}`;});
   $('res-nombre').value=snap.nombre;
   $('res-fecha').value=snap.fecha;
-  $('res-estado').value=snap.estado;
+  $('res-estado').value=getEditableReservationStatus(snap.estado);
+  const search=$('res-prod-search');if(search)search.value=snap.search||'';
   $('res-nota').value=snap.nota;
+  renderReservaModalActions(snap.editReservaId||null);
   renderReservaProductoGrid();renderReservaProdChips();renderReservaCarrito();
 }
 
@@ -3112,7 +3157,14 @@ function renderReservaProductoGrid(){
   const el=$('res-prod-grid');if(!el)return;
   const rcIds=cats.filter(c=>c.reservable).map(c=>c.id);
   const base=(menu||[]).filter(p=>p.active!==false&&rcIds.includes(p.cat));
-  const list=catReserva==='todos'?base:base.filter(p=>p.cat===catReserva);
+  const q=($('res-prod-search')?.value||'').trim().toLowerCase();
+  const byCat=catReserva==='todos'?base:base.filter(p=>p.cat===catReserva);
+  const list=byCat.filter(p=>{
+    if(!q)return true;
+    const cat=getCat(p.cat);
+    return String(p.name||'').toLowerCase().includes(q)||String(cat?.name||'').toLowerCase().includes(q);
+  });
+  if(!list.length){el.innerHTML='<div class="empty" style="grid-column:1/-1">Sin productos</div>';$('res-total').textContent=fmt(carritoTotalFn(reservaCarrito));return;}
   el.innerHTML=list.map(p=>{
     const productId=getProductFrontId(p);
     const qty=getCartQtyForProduct(reservaCarrito,p),cat=getCat(p.cat);
@@ -3177,14 +3229,17 @@ function renderReservaCarrito(){
 }
 function cerrarModalReserva(){$('modal-reserva').classList.remove('open');}
 function closeModalReserva(e){if(e.target===$('modal-reserva'))cerrarModalReserva();}
-function guardarReserva(){
-  const nombre=($('res-nombre')?.value||'').trim();if(!nombre){showToast('Ingresá un nombre');return;}
+function guardarReserva(action='save'){
+  window.__reservationChargeAfterSave=action==='charge';
+  const nombre=($('res-nombre')?.value||'').trim();if(!nombre){window.__reservationChargeAfterSave=false;showToast('Ingresá un nombre');return;}
   const clienteId=$('res-cliente')?.value;
   const cli=clientes.find(c=>c.id===clienteId);
   const items=Object.values(reservaCarrito).filter(i=>i.qty>0);
+  if(action==='charge'&&!items.length){window.__reservationChargeAfterSave=false;showToast('Agregá al menos un producto para cobrar.');return;}
+  const selectedStatus=getEditableReservationStatus($('res-estado')?.value||'pendiente');
   const data={tipo:tipoNuevaMesaReserva,nombre,clienteId,clienteNombre:cli?cli.nombre:'',
-    fecha:$('res-fecha')?.value,estado:$('res-estado')?.value,nota:$('res-nota')?.value.trim(),
-    items,pago:reservaPago};
+    fecha:$('res-fecha')?.value,estado:action==='charge'?'pendiente':selectedStatus,nota:$('res-nota')?.value.trim(),
+    items,pago:normalizeNewPaymentMethod(reservaPago||'ef'),payment_mode:'single',pagos:[]};
   if(editReservaId){Object.assign(reservas.find(x=>x.id===editReservaId),data);}
   else{reservas.push({id:'res_'+Date.now(),...data});}
   const saved=editReservaId?reservas.find(x=>sameId(x.id,editReservaId)):reservas[reservas.length-1];
@@ -3492,14 +3547,13 @@ function guardarCliente(){
     reservaCarrito={...snap.reservaCarrito};catReserva=snap.catReserva;
     $('res-nombre').value=snap.nombre;
     $('res-fecha').value=snap.fecha;
-    $('res-estado').value=snap.estado;
+    $('res-estado').value=getEditableReservationStatus(snap.estado);
+    const search=$('res-prod-search');if(search)search.value=snap.search||'';
     $('res-nota').value=snap.nota;
     popularClienteSelectReserva(newId||snap.clienteId);
     renderReservaProductoGrid();renderReservaProdChips();
     $('reserva-modal-titulo').textContent=snap.editReservaId?'Editar reserva':'Nueva reserva';
-    $('reserva-modal-actions').innerHTML=snap.editReservaId?
-      `<button class="btn-cancel" type="button" onclick="pedirEliminarReserva('${snap.editReservaId}')">Eliminar</button><button class="btn-save" type="button" onclick="guardarReserva()">Guardar</button>`:
-      `<button class="btn-cancel" type="button" onclick="cerrarModalReserva()">Cancelar</button><button class="btn-save" type="button" onclick="guardarReserva()">Guardar</button>`;
+    renderReservaModalActions(snap.editReservaId||null);
     ['salon','delivery','takeaway'].forEach(t=>{$(`rtipo-btn-${t}`).className=`tipo-btn${t===tipoNuevaMesaReserva?' sel-'+t:''}`;});
     $('modal-reserva').classList.add('open');
   }
@@ -7898,7 +7952,10 @@ if(config.webappUrl){loadFromSheets();}
       const wasEdit=!!editReservaId;
       const beforeIds=new Set(reservas.map(r=>String(r.id)));
       const targetId=editReservaId;
+      const chargeAfterSave=args[0]==='charge'||window.__reservationChargeAfterSave===true;
       const res=_guardarReservaCr.apply(this,args);
+      window.__reservationChargeAfterSave=false;
+      if(!res) return res;
       const reservation=wasEdit ? reservas.find(r=>sameId(r.id,targetId)) : reservas.find(r=>!beforeIds.has(String(r.id)));
       if(reservation){
         markReservationPending(reservation,wasEdit?'edit':'create');
@@ -7910,8 +7967,14 @@ if(config.webappUrl){loadFromSheets();}
           await saveReservationToSupabase(reservation);
           clearReservationPending(reservation);
           await syncReservasSheets().catch(()=>false);
-          showToast('Reserva guardada.');
-          window.reloadCustomersReservationsFromSupabase?.(true).then(()=>renderReservasSection()).catch(()=>{});
+          if(chargeAfterSave){
+            showToast('Elegí el medio de pago.');
+            renderReservasSection();
+            setTimeout(()=>abrirReservaComoVenta(reservation.id),0);
+          }else{
+            showToast('Reserva guardada.');
+            window.reloadCustomersReservationsFromSupabase?.(true).then(()=>renderReservasSection()).catch(()=>{});
+          }
         }catch(err){
           if(reservation)clearReservationPending(reservation);
           reservas=before;
