@@ -66,6 +66,16 @@ where o.store_id = s.store_id
   and o.id = s.open_order_id
   and o.status::text = 'open';
 
+with sold_open_orders as (
+  select distinct s.store_id, s.open_order_id
+  from public.sales s
+  where s.open_order_id is not null
+)
+delete from public.open_order_items i
+using sold_open_orders s
+where i.store_id = s.store_id
+  and i.open_order_id = s.open_order_id;
+
 notify pgrst, 'reload schema';
 
 commit;
