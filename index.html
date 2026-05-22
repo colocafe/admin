@@ -2890,10 +2890,20 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
       }else{
         const mesaCobrada=findMesaByAnyId(mesaActivaId);
         if(mesaCobrada?._sb_id){
-          try{
-            await cajaWithTimeout(window.deleteOpenOrderFromSupabase?.(mesaCobrada._sb_id),'close_open_order_after_sale',10000);
-          }catch(err){
+          const closeOk=await cajaWithTimeout(window.closeOpenOrderInSupabase?.(mesaCobrada._sb_id,{
+            saleId:salesSync?.last?.saleId||null,
+            legacyId:salesSync?.last?.legacyId||null,
+            reason:'paid',
+            deleteItems:true,
+            deleteRowOnCloseFailure:true
+          }),'close_open_order_after_sale',12000).catch(err=>{
             if(window.canShowClientTechnicalUi?.())console.warn('[Caja] venta guardada pero mesa no se cerró en base',err);
+            return false;
+          });
+          if(closeOk===false){
+            window.reconcileSoldOpenOrders?.([mesaCobrada._sb_id],{reason:'post_sale_fallback'}).catch(err=>{
+              if(window.canShowClientTechnicalUi?.())console.warn('[Caja] fallback reconciliation failed',err);
+            });
           }
         }
         removeMesaByAnyId(mesaActivaId);
@@ -5310,6 +5320,23 @@ if(config.webappUrl){loadFromSheets();}
         return{ok:true,count:0};
       }
 
+      const soldRows=await findSoldOpenOrderRows(orders.map(o=>o.id),storeId);
+      const soldOrderIds=new Set((soldRows||[]).map(row=>String(row.open_order_id||'')).filter(Boolean));
+      if(soldOrderIds.size){
+        reconcileSoldOpenOrders(Array.from(soldOrderIds),{rows:soldRows,reason:'load'}).catch(err=>{
+          if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] sold order reconciliation failed',err);
+        });
+        orders=orders.filter(o=>!soldOrderIds.has(String(o.id||'')));
+      }
+
+      if(!orders.length){
+        mesas=[];
+        if(typeof window.save==='function')window.save();
+        ooHasSupabaseRead=true;ooSetState('supabase','');ooLastRead=ooStamp();ooCount=0;ooItemCount=0;ooUpdateDiag();
+        ooRenderVisible();
+        return{ok:true,count:0,reconciled:soldOrderIds.size};
+      }
+
       const orderIds=orders.map(o=>o.id);
       ooRememberOperation('open_order_items','select',`select items where store_id=${storeId} and open_order_id in (${orderIds.length} ids)`);
       const{data:items,error:itemsErr}=await ooWithTimeout(client
@@ -5429,6 +5456,13 @@ if(config.webappUrl){loadFromSheets();}
         order=byLegacy.data||null;
       }
       if(!order||order.status!=='open')return null;
+      const soldRows=await findSoldOpenOrderRows([order.id],storeId);
+      if((soldRows||[]).length){
+        reconcileSoldOpenOrders([order.id],{rows:soldRows,reason:'load_single'}).catch(err=>{
+          if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] single sold order reconciliation failed',err);
+        });
+        return null;
+      }
       ooRememberOperation('open_order_items','select_single_items',`select items where store_id=${storeId} and open_order_id=${order.id}`);
       const {data:items,error:itemsErr}=await ooWithTimeout(client
         .from('open_order_items')
@@ -5643,19 +5677,149 @@ if(config.webappUrl){loadFromSheets();}
     return ok;
   }
 
-  // ── Delete: mesa cobrada/eliminada ────────────────
-  async function deleteOpenOrderFromSupabase(sbId){
+  async function findSoldOpenOrderRows(orderIds,storeId=ooStoreId()){
+    const ids=[...new Set((orderIds||[]).map(id=>String(id||'')).filter(Boolean))];
+    const client=ooClient();
+    if(!client||!storeId||!ids.length)return[];
+    try{
+      ooRememberOperation('sales','select_open_order_refs',`select sales where store_id=${storeId} and open_order_id in (${ids.length} ids)`);
+      const {data,error}=await ooWithTimeout(client
+        .from('sales')
+        .select('id,open_order_id,legacy_id,sold_at')
+        .eq('store_id',storeId)
+        .in('open_order_id',ids),'sales_open_order_refs');
+      if(error)throw error;
+      return data||[];
+    }catch(err){
+      ooRememberError(err,{table:'sales',operation:'select_open_order_refs',query:`select sales by open_order_id (${ids.length} ids)`,store_id:storeId});
+      throw err;
+    }
+  }
+
+  async function closeOpenOrderInSupabase(sbId,opts={}){
     const client=ooClient(),storeId=ooStoreId();
     if(!client||!storeId||!sbId)return false;
+    const closedAt=opts.closedAt||getLocalTimestamp();
+    const reason=opts.reason||'closed';
     try{
-      await client.from('open_order_items').delete().eq('open_order_id',sbId).eq('store_id',storeId);
-      const{error}=await client.from('open_orders').delete().eq('id',sbId).eq('store_id',storeId);
-      if(error)throw error;
-      return true;
+      ooRememberOperation('open_orders','close_read',`select open_order before close ${sbId}`);
+      const current=await ooWithTimeout(client
+        .from('open_orders')
+        .select('id,status,metadata')
+        .eq('id',sbId)
+        .eq('store_id',storeId)
+        .maybeSingle(),'close_open_order_read');
+      if(current.error)throw current.error;
+      if(!current.data){
+        if(opts.deleteItems!==false){
+          await ooWithTimeout(client.from('open_order_items').delete().eq('open_order_id',sbId).eq('store_id',storeId),'close_missing_open_order_items_delete');
+        }
+        return true;
+      }
+      const metadata={
+        ...(current.data.metadata||{}),
+        status:'closed',
+        closed_at:closedAt,
+        close_reason:reason
+      };
+      if(opts.saleId)metadata.closed_by_sale_id=opts.saleId;
+      if(opts.legacyId)metadata.closed_by_sale_legacy_id=opts.legacyId;
+      ooRememberOperation('open_orders','close_update',`update open_order status=closed ${sbId}`);
+      const update=await ooWithTimeout(client
+        .from('open_orders')
+        .update({status:'closed',metadata})
+        .eq('id',sbId)
+        .eq('store_id',storeId)
+        .select('id,status')
+        .maybeSingle(),'close_open_order_update');
+      if(update.error)throw update.error;
+
+      if(opts.deleteItems!==false){
+        ooRememberOperation('open_order_items','close_delete_items',`delete items for closed open_order ${sbId}`);
+        const itemDelete=await ooWithTimeout(client
+          .from('open_order_items')
+          .delete()
+          .eq('open_order_id',sbId)
+          .eq('store_id',storeId),'close_open_order_items_delete');
+        if(itemDelete.error)throw itemDelete.error;
+      }
+
+      let deleted=false;
+      if(opts.deleteRow){
+        ooRememberOperation('open_orders','delete_after_close',`delete closed open_order ${sbId}`);
+        const rowDelete=await ooWithTimeout(client
+          .from('open_orders')
+          .delete()
+          .eq('id',sbId)
+          .eq('store_id',storeId),'delete_closed_open_order');
+        if(rowDelete.error){
+          if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] delete after close failed; row remains closed',rowDelete.error);
+        }else{
+          deleted=true;
+        }
+      }
+      return deleted||!update.data||String(update.data.status||'')!=='open';
     }catch(err){
-      console.warn('[open_orders] delete failed:',err);
+      ooRememberError(err,{table:'open_orders',operation:'close',query:'update status=closed and delete items',store_id:storeId});
+      if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] close failed:',{
+        code:err?.code||'',
+        message:err?.message||String(err)||'',
+        details:err?.details||'',
+        hint:err?.hint||'',
+        open_order_id:sbId,
+        store_id:storeId,
+        reason
+      });
+      if(opts.deleteRow||opts.deleteRowOnCloseFailure){
+        try{
+          ooRememberOperation('open_order_items','delete_after_close_failure',`delete items after close failure ${sbId}`);
+          const itemDelete=await ooWithTimeout(client
+            .from('open_order_items')
+            .delete()
+            .eq('open_order_id',sbId)
+            .eq('store_id',storeId),'delete_items_after_close_failure');
+          if(itemDelete.error)throw itemDelete.error;
+          ooRememberOperation('open_orders','delete_after_close_failure',`delete open_order after close failure ${sbId}`);
+          const rowDelete=await ooWithTimeout(client
+            .from('open_orders')
+            .delete()
+            .eq('id',sbId)
+            .eq('store_id',storeId),'delete_open_order_after_close_failure');
+          if(rowDelete.error)throw rowDelete.error;
+          return true;
+        }catch(deleteErr){
+          ooRememberError(deleteErr,{table:'open_orders',operation:'delete_after_close_failure',query:'delete row after close failed',store_id:storeId});
+          if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] delete after close failure failed:',deleteErr);
+        }
+      }
       return false;
     }
+  }
+
+  async function reconcileSoldOpenOrders(orderIds,{rows=null,reason='reconcile'}={}){
+    const storeId=ooStoreId();
+    const soldRows=rows||await findSoldOpenOrderRows(orderIds,storeId);
+    const byOrder=new Map();
+    (soldRows||[]).forEach(row=>{
+      const key=String(row.open_order_id||'');
+      if(key&&!byOrder.has(key))byOrder.set(key,row);
+    });
+    let closed=0;
+    for(const [openOrderId,sale] of byOrder.entries()){
+      const ok=await closeOpenOrderInSupabase(openOrderId,{
+        saleId:sale.id||null,
+        legacyId:sale.legacy_id||null,
+        reason:reason==='load'||reason==='load_single'?'sold_reconciliation':reason,
+        deleteItems:true
+      });
+      if(ok)closed++;
+    }
+    return{ok:closed===byOrder.size,closed,total:byOrder.size,orderIds:[...byOrder.keys()]};
+  }
+
+  // ── Delete: mesa cobrada/eliminada ────────────────
+  async function deleteOpenOrderFromSupabase(sbId){
+    return closeOpenOrderInSupabase(sbId,{reason:'deleted',deleteItems:true,deleteRow:true});
   }
 
   // ── Anti-double-cobro: chequear si sigue abierta ──
@@ -5678,7 +5842,12 @@ if(config.webappUrl){loadFromSheets();}
           .eq('store_id',storeId)
           .eq('open_order_id',sbId);
         if(saleCheck.error) throw Object.assign(saleCheck.error,{_salesOp:'check_sale_for_open_order',_salesTable:'sales'});
-        if((Number(saleCheck.count)||0)>0) return false;
+        if((Number(saleCheck.count)||0)>0){
+          reconcileSoldOpenOrders([sbId],{reason:'check_sold'}).catch(err=>{
+            if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] sold order check reconciliation failed',err);
+          });
+          return false;
+        }
       }
       return data.status==='open';
     }catch(err){
@@ -5874,6 +6043,8 @@ if(config.webappUrl){loadFromSheets();}
   window.loadSingleOpenOrderFromSupabase=loadSingleOpenOrderFromSupabase;
   window.diagnoseCajaSmoke=diagnoseCajaSmoke;
   window.syncMesaToSupabase=syncMesaToSupabase;
+  window.closeOpenOrderInSupabase=closeOpenOrderInSupabase;
+  window.reconcileSoldOpenOrders=reconcileSoldOpenOrders;
   window.deleteOpenOrderFromSupabase=deleteOpenOrderFromSupabase;
   window.checkOpenOrderStillOpen=checkOpenOrderStillOpen;
   window.updateOODiag=ooUpdateDiag;
@@ -10968,6 +11139,17 @@ if(config.webappUrl){loadFromSheets();}
       readBack=await verifySaleGroupReadBack(client,storeId,group,saleId);
       logSalesWriteAttempt('read_back_ok',{operation:salePayload?.metadata?.source_kind||'venta',storeId,session,salePayload,itemsPayload,paymentsPayload,saleResult:saleData,itemsResult:itemsData,paymentsResult:paymentsData,readBack});
       markLocalSaleRowsSync(group.rows,{saleId,status:'synced',error:''});
+      if(salePayload?.open_order_id&&window.closeOpenOrderInSupabase){
+        await window.closeOpenOrderInSupabase(salePayload.open_order_id,{
+          saleId,
+          legacyId:saleData?.legacy_id||salesLastTicket||null,
+          reason:'paid',
+          deleteItems:true,
+          deleteRowOnCloseFailure:true
+        }).catch(err=>{
+          if(window.canShowClientTechnicalUi?.())console.warn('[Sales] open_order close after sale sync failed',err);
+        });
+      }
       salesLastSyncAt=stampSalesMoment();
       setSalesWriteState('ready');
       await refreshSalesDiagnostics({silent:true});
@@ -11420,6 +11602,17 @@ if(config.webappUrl){loadFromSheets();}
       const paymentInsert=await client.from('sale_payments').insert(paymentPayload).select('id').single();
       if(paymentInsert.error) throw Object.assign(paymentInsert.error,{_salesTable:'sale_payments',_salesOp:'insert',_salesPayload:paymentPayload,_saleId:saleId});
       paymentsInserted++;
+    }
+    if(salePayload?.open_order_id&&window.closeOpenOrderInSupabase){
+      await window.closeOpenOrderInSupabase(salePayload.open_order_id,{
+        saleId,
+        legacyId:saleInsert.data.legacy_id||entryLocal.legacyId,
+        reason:'paid_recovery',
+        deleteItems:true,
+        deleteRowOnCloseFailure:true
+      }).catch(err=>{
+        if(window.canShowClientTechnicalUi?.())console.warn('[Recovery] open_order close after sale recovery failed',err);
+      });
     }
     markLocalSaleRowsSync(group.rows,{saleId,status:'synced',error:''});
     salesLastSyncAt=stampSalesMoment();
