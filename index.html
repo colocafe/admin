@@ -1347,7 +1347,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 </div>
 
 <!-- MODAL: OPERADOR AL COBRAR -->
-<div class="modal-ov" id="modal-operador-cobro" onclick="e=>e.stopPropagation()">
+<div class="modal-ov" id="modal-operador-cobro" onclick="closeModalOperadorCobro(event)">
   <div class="modal-box" style="max-width:360px">
     <div class="modal-title">¿Quién atendió esta mesa?</div>
     <div class="modal-field">
@@ -2743,6 +2743,7 @@ function onCobroOperadorChange(){
   $('cobro-nuevo-op-wrap').style.display=sel?.value==='__nuevo__'?'block':'none';
 }
 function cerrarModalOperadorCobro(){$('modal-operador-cobro').classList.remove('open');pendingCobroCallback=null;}
+function closeModalOperadorCobro(e){if(e.target===$('modal-operador-cobro'))cerrarModalOperadorCobro();}
 async function confirmarOperadorCobro(){
   const sel=$('cobro-operador-sel');
   let op='';
@@ -2777,34 +2778,45 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
   window.__cajaCobroEnCursoHasta=Date.now()+30000;
   try{
     await cajaWithTimeout((async()=>{
-      // ── Anti-double-cobro: verificar que la mesa siga abierta en Supabase ──
-      if(!esReserva&&window.checkOpenOrderStillOpen){
-        const mesaChk=findMesaByAnyId(mesaActivaId);
-        if(!mesaChk){showToast('No pudimos cargar esta mesa. Reintentá.');return;}
-        if(!mesaChk?._sb_id){
-          showToast('No pudimos confirmar el estado de la mesa. Reintentá en unos segundos.');
-          return;
-        }
-        let stillOpen=null;
-        try{
-          stillOpen=await cajaWithTimeout(window.checkOpenOrderStillOpen(mesaChk._sb_id),'check_open_order',10000);
-        }catch(err){
-          if(window.canShowClientTechnicalUi?.())console.warn('[Caja] check open_order failed before payment',err);
-          showToast('No pudimos confirmar el estado de la mesa. Reintentá en unos segundos.');
-          return;
-        }
-        if(stillOpen===false){
-          showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
-          removeMesaByAnyId(mesaActivaId);save();renderVentas();return;
-        }
-        if(stillOpen!==true){
-          showToast('No pudimos confirmar el estado de la mesa. Reintentá en unos segundos.');
-          return;
-        }
-      }
       const totalVenta=money2(carritoTotalFn(carrito));
       const paymentState=getCurrentPaymentState(totalVenta);
       if(!paymentState.valido){showToast(paymentState.mensaje||'Revisá los pagos');return;}
+      // ── Anti-double-cobro: verificar que la mesa siga abierta en Supabase ──
+      if(!esReserva){
+        const mesaChk=findMesaByAnyId(mesaActivaId);
+        if(!mesaChk){showToast('No pudimos cargar esta mesa. Reintentá.');return;}
+        if(!mesaChk?._sb_id){
+          mesaChk.items={...carrito};
+          mesaChk.pago=paymentState.pago;
+          mesaChk.payment_mode=paymentState.payment_mode;
+          mesaChk.pagos=paymentState.pagos;
+          const synced=await cajaWithTimeout(window.syncMesaToSupabase?.(mesaChk),'sync_open_order_before_payment',12000).catch(err=>{
+            if(window.canShowClientTechnicalUi?.())console.warn('[Caja] no se pudo preparar la mesa remota antes de cobrar',err);
+            return false;
+          });
+          if(synced&&mesaChk._sb_id){
+            mesaActivaId=getMesaOpenOrderId(mesaChk);
+          }else if(window.canShowClientTechnicalUi?.()){
+            console.warn('[Caja] la mesa se cobrará sin open_order remoto confirmado',{mesaId:mesaActivaId,nombre:mesaChk.nombre});
+          }
+        }
+        if(mesaChk?._sb_id&&window.checkOpenOrderStillOpen){
+          let stillOpen=null;
+          try{
+            stillOpen=await cajaWithTimeout(window.checkOpenOrderStillOpen(mesaChk._sb_id),'check_open_order',10000);
+          }catch(err){
+            if(window.canShowClientTechnicalUi?.())console.warn('[Caja] check open_order failed before payment',err);
+            stillOpen=null;
+          }
+          if(stillOpen===false){
+            showToast('Esta mesa ya fue cerrada desde otro dispositivo.');
+            removeMesaByAnyId(mesaActivaId);save();renderVentas();return;
+          }
+          if(stillOpen!==true&&window.canShowClientTechnicalUi?.()){
+            console.warn('[Caja] no se pudo confirmar estado remoto; continúa el cobro para no bloquear caja',{mesaId:mesaChk._sb_id});
+          }
+        }
+      }
       const momentoVenta=new Date();
       const fecha=getLocalDateString(momentoVenta),hora=getLocalTimeString(momentoVenta),ts=getLocalTimestamp(momentoVenta);
       const turnoActivo=turno&&turno.abierto?turno:null;
@@ -5841,7 +5853,11 @@ if(config.webappUrl){loadFromSheets();}
           .select('id',{count:'exact',head:true})
           .eq('store_id',storeId)
           .eq('open_order_id',sbId);
-        if(saleCheck.error) throw Object.assign(saleCheck.error,{_salesOp:'check_sale_for_open_order',_salesTable:'sales'});
+        if(saleCheck.error){
+          ooRememberError(saleCheck.error,{table:'sales',operation:'check_sale_for_open_order',query:'count sales by open_order_id',store_id:storeId});
+          if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] sale check failed; treating open_order status as source of truth',saleCheck.error);
+          return true;
+        }
         if((Number(saleCheck.count)||0)>0){
           reconcileSoldOpenOrders([sbId],{reason:'check_sold'}).catch(err=>{
             if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] sold order check reconciliation failed',err);
