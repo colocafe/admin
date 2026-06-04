@@ -543,6 +543,54 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reserva-card.confirmada{border-color:var(--green)}
 .reserva-card.pagada{border-color:var(--blue)}
 .reserva-card.cancelada{border-color:var(--border2);opacity:.7}
+.reserva-card-time{width:56px;flex-shrink:0;text-align:center;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 6px}
+.reserva-card-hour{font-size:15px;font-weight:700;color:var(--ink);line-height:1}
+.reserva-card-date{font-size:10px;color:var(--ink3);margin-top:4px}
+.reserva-reminder-meta{font-size:11px;color:var(--ink3);margin-top:3px}
+
+/* ── RESERVA MODAL OPTIMIZADO ── */
+.reserva-modal-box{max-width:980px!important;padding:0;display:grid;grid-template-rows:auto 1fr auto;max-height:min(90vh,760px);overflow:hidden}
+.reserva-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 30px 12px}
+.reserva-modal-head .modal-title{margin:0}
+.reserva-modal-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.75fr);gap:18px;padding:0 30px 18px;min-height:0}
+.reserva-main-col,.reserva-side-col{min-height:0;display:flex;flex-direction:column;gap:14px}
+.reserva-form-grid{display:grid;grid-template-columns:1.4fr .85fr .7fr 1fr;gap:10px;align-items:end}
+.reserva-products-panel{min-height:0;display:flex;flex-direction:column;gap:8px}
+.reserva-products-tools{display:flex;flex-direction:column;gap:8px}
+.reserva-products-scroll{min-height:230px;max-height:360px;overflow-y:auto;padding-right:4px}
+.reserva-side-col{border-left:1px solid var(--border);padding-left:18px}
+.reserva-summary-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.reserva-summary-title{font-size:13px;font-weight:700;color:var(--ink)}
+.reserva-cart-scroll{min-height:120px;overflow-y:auto;padding-right:4px}
+.reserva-note textarea{min-height:74px}
+.reserva-total-line{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm)}
+.reserva-total-label{font-size:12px;color:var(--ink2)}
+.reserva-total-value{font-size:17px;font-weight:700;color:var(--orange)}
+.reserva-modal-footer{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:10px;padding:14px 30px 18px;border-top:1px solid var(--border);background:rgba(255,252,248,.96)}
+.reserva-footer-total{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+.reserva-footer-total strong{font-size:18px;color:var(--orange)}
+.reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{min-width:150px}
+.reserva-reminder-box{text-align:left;max-width:420px}
+.reserva-reminder-title{font-family:var(--ff-serif);font-size:24px;color:var(--ink);margin-bottom:10px}
+.reserva-reminder-text{font-size:14px;color:var(--ink2);line-height:1.5;margin-bottom:10px}
+.reserva-reminder-detail{font-size:13px;color:var(--ink);line-height:1.55;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:14px}
+@media(max-width:900px){
+  .reserva-modal-box{max-height:94vh}
+  .reserva-modal-head{padding:18px 18px 10px}
+  .reserva-modal-body{grid-template-columns:1fr;padding:0 18px 14px;overflow-y:auto}
+  .reserva-form-grid{grid-template-columns:1fr 1fr}
+  .reserva-products-scroll{max-height:320px}
+  .reserva-side-col{border-left:0;border-top:1px solid var(--border);padding-left:0;padding-top:14px}
+  .reserva-cart-scroll{max-height:220px}
+  .reserva-modal-footer{grid-template-columns:1fr;position:sticky;bottom:0;padding:12px 18px 16px}
+  .reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{width:100%;min-width:0}
+}
+@media(max-width:560px){
+  .reserva-form-grid{grid-template-columns:1fr}
+  .reserva-modal-head{padding-right:52px}
+  .reserva-products-scroll{min-height:220px}
+  .reserva-modal-footer{gap:8px}
+}
 
 /* ── TURNO PILL actualizada ── */
 .turno-pill{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;border:1px solid var(--border);background:var(--surf2);font-size:11px;color:var(--ink3);flex-shrink:0;cursor:pointer;transition:all .15s;font-family:var(--ff)}
@@ -1171,71 +1219,91 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 
 <!-- MODAL: RESERVA (con productos múltiples) -->
 <div class="modal-ov" id="modal-reserva" onclick="closeModalReserva(event)">
-  <div class="modal-box" style="max-width:540px">
+  <div class="modal-box reserva-modal-box">
     <div class="modal-close" onclick="cerrarModalReserva()">×</div>
-    <div class="modal-title" id="reserva-modal-titulo">Reserva</div>
-    <!-- Tipo -->
-    <div class="tipo-btns" style="margin-bottom:14px">
-      <div class="tipo-btn" id="rtipo-btn-salon" onclick="selReservaTipo('salon')">🪑 Salón</div>
-      <div class="tipo-btn" id="rtipo-btn-delivery" onclick="selReservaTipo('delivery')">🛵 Delivery</div>
-      <div class="tipo-btn" id="rtipo-btn-takeaway" onclick="selReservaTipo('takeaway')">🥡 Take away</div>
-    </div>
-    <div class="modal-2col">
-      <div class="modal-field">
-        <label class="modal-lbl">Nombre / identificación</label>
-        <input class="modal-input" id="res-nombre" type="text" placeholder="Juan García, Cumpleaños…" maxlength="60">
+    <div class="reserva-modal-head">
+      <div class="modal-title" id="reserva-modal-titulo">Reserva</div>
+      <div class="tipo-btns" style="margin-bottom:0">
+        <div class="tipo-btn" id="rtipo-btn-salon" onclick="selReservaTipo('salon')">🪑 Salón</div>
+        <div class="tipo-btn" id="rtipo-btn-delivery" onclick="selReservaTipo('delivery')">🛵 Delivery</div>
+        <div class="tipo-btn" id="rtipo-btn-takeaway" onclick="selReservaTipo('takeaway')">🥡 Take away</div>
       </div>
-      <div class="modal-field">
-        <label class="modal-lbl">Cliente (opcional)</label>
-        <div style="display:flex;gap:6px">
-          <select class="modal-select" id="res-cliente" style="flex:1"></select>
-          <button class="btn-sm primary" onclick="openClienteDesdeReserva()" style="flex-shrink:0">+</button>
+    </div>
+    <div class="reserva-modal-body">
+      <div class="reserva-main-col">
+        <div class="reserva-form-grid">
+          <div class="modal-field">
+            <label class="modal-lbl">Nombre / identificación</label>
+            <input class="modal-input" id="res-nombre" type="text" placeholder="Juan García, Cumpleaños…" maxlength="60">
+          </div>
+          <div class="modal-field">
+            <label class="modal-lbl">Fecha</label>
+            <input class="modal-input" id="res-fecha" type="date">
+          </div>
+          <div class="modal-field">
+            <label class="modal-lbl">Hora</label>
+            <input class="modal-input" id="res-hora" type="time">
+          </div>
+          <div class="modal-field">
+            <label class="modal-lbl">Recordatorio</label>
+            <select class="modal-select" id="res-recordatorio">
+              <option value="none">Sin recordatorio</option>
+              <option value="10">10 minutos antes</option>
+              <option value="30">30 minutos antes</option>
+              <option value="0">A la hora</option>
+            </select>
+          </div>
+        </div>
+        <div class="reserva-products-panel">
+          <label class="modal-lbl">Productos reservados</label>
+          <div class="reserva-products-tools">
+            <input class="inv-search" id="res-prod-search" type="search" placeholder="Buscar producto…" oninput="renderReservaProductoGrid()">
+            <div id="res-prod-chips" class="cat-chips"></div>
+          </div>
+          <div class="prod-grid reserva-products-scroll" id="res-prod-grid"></div>
+        </div>
+      </div>
+      <div class="reserva-side-col">
+        <div class="reserva-summary-head">
+          <div class="reserva-summary-title">Pedido</div>
+          <div class="reserva-total-value" id="res-total">$0</div>
+        </div>
+        <div id="res-carrito-wrap" class="reserva-cart-scroll">
+          <div id="res-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:18px 0">Todavía no agregaste productos a la reserva.</div>
+          <div id="res-carrito-rows"></div>
+        </div>
+        <div class="modal-field reserva-note">
+          <label class="modal-lbl">Nota</label>
+          <textarea class="modal-textarea" id="res-nota" placeholder="Canelones veganos, alergia a maní…"></textarea>
+        </div>
+        <div class="reserva-total-line">
+          <span class="reserva-total-label">Total</span>
+          <span class="reserva-total-value" id="res-total-side">$0</span>
+        </div>
+        <!-- Forma de pago (para cuando se confirma como venta) -->
+        <div id="res-pago-wrap" style="display:none">
+          <div class="pago-lbl" style="margin-top:10px">Forma de pago</div>
+          <div class="pago-grid">
+            <div class="pago-opt active" id="rpopt-ef" onclick="setReservaPago('ef')">Efectivo</div>
+            <div class="pago-opt" id="rpopt-tr" onclick="setReservaPago('transferencia')">Transferencia</div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="modal-2col">
-      <div class="modal-field">
-        <label class="modal-lbl">Fecha</label>
-        <input class="modal-input" id="res-fecha" type="date">
-      </div>
-      <div class="modal-field">
-        <label class="modal-lbl">Estado</label>
-        <select class="modal-select" id="res-estado">
-          <option value="pendiente">Pendiente</option>
-          <option value="confirmada">Confirmada</option>
-          <option value="cancelada">Cancelada</option>
-        </select>
-      </div>
+    <div id="reserva-modal-actions" class="reserva-modal-footer"></div>
+  </div>
+</div>
+
+<!-- MODAL: RECORDATORIO DE RESERVA -->
+<div class="modal-ov" id="modal-reserva-reminder">
+  <div class="modal-box reserva-reminder-box">
+    <div class="reserva-reminder-title">Reserva próxima</div>
+    <div class="reserva-reminder-text" id="reserva-reminder-text">Tenés una reserva pronto.</div>
+    <div class="reserva-reminder-detail" id="reserva-reminder-detail"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" type="button" onclick="dismissReservationReminder()">Ignorar</button>
+      <button class="btn-save" type="button" onclick="snoozeReservationReminder()">Repetir en 10 minutos</button>
     </div>
-    <!-- Productos múltiples -->
-    <div class="modal-field">
-      <label class="modal-lbl">Productos reservados</label>
-      <input class="inv-search" id="res-prod-search" type="search" placeholder="Buscar producto…" oninput="renderReservaProductoGrid()" style="margin-bottom:8px">
-      <div id="res-prod-chips" class="cat-chips" style="margin-bottom:8px"></div>
-      <div class="prod-grid" id="res-prod-grid" style="max-height:240px;overflow-y:auto"></div>
-    </div>
-    <!-- Carrito de reserva: ítems seleccionados con controles -->
-    <div id="res-carrito-wrap" style="margin-bottom:12px">
-      <div id="res-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:6px 0">Todavía no agregaste productos a la reserva.</div>
-      <div id="res-carrito-rows"></div>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surf2);border-radius:var(--r-sm);margin-bottom:12px">
-      <span style="font-size:13px;color:var(--ink2)">Total</span>
-      <span style="font-size:15px;font-weight:500;color:var(--orange)" id="res-total">$0</span>
-    </div>
-    <div class="modal-field">
-      <label class="modal-lbl">Nota</label>
-      <textarea class="modal-textarea" id="res-nota" placeholder="Canelones veganos, alergia a maní…"></textarea>
-    </div>
-    <!-- Forma de pago (para cuando se confirma como venta) -->
-    <div id="res-pago-wrap" style="display:none">
-      <div class="pago-lbl" style="margin-top:10px">Forma de pago</div>
-      <div class="pago-grid">
-        <div class="pago-opt active" id="rpopt-ef" onclick="setReservaPago('ef')">Efectivo</div>
-        <div class="pago-opt" id="rpopt-tr" onclick="setReservaPago('transferencia')">Transferencia</div>
-      </div>
-    </div>
-    <div id="reserva-modal-actions" class="modal-actions"></div>
   </div>
 </div>
 
@@ -1538,6 +1606,7 @@ let confirmCallback=null,activeMenuTab='cats',ventasFiltroTipo='todos';
 let _variantesEdit=[],pendingCobroCallback=null;
 // Snapshot of reserva modal data when opening cliente modal from it
 let reservaSnapshot=null;
+let activeReservationReminder=null,reservationReminderTimer=null;
 window.__reservationChargeAfterSave=false;
 
 function save(){
@@ -1675,6 +1744,47 @@ function normalizeBusinessTime(hora,timestamp){
   if(timestamp){const d=parseLocalDateSafe(timestamp);if(!Number.isNaN(d.getTime()))return getLocalTimeString(d);}
   return '';
 }
+function composeLocalDateTime(fecha,hora){
+  const dm=String(fecha||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const tm=String(hora||'').match(/^(\d{2}):(\d{2})$/);
+  if(!dm||!tm)return null;
+  const d=new Date(Number(dm[1]),Number(dm[2])-1,Number(dm[3]),Number(tm[1]),Number(tm[2]),0,0);
+  return Number.isNaN(d.getTime())?null:d;
+}
+function getReservationDateTime(reservation){
+  return composeLocalDateTime(reservation?.fecha,reservation?.hora)
+    || (reservation?.reservation_at?parseLocalDateSafe(reservation.reservation_at):null);
+}
+function getReservationTimestamp(reservation){
+  const d=getReservationDateTime(reservation);
+  return d?getLocalTimestamp(d):null;
+}
+function formatDateDDMMYYYY(fecha){
+  const d=parseLocalDateSafe(fecha);
+  return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+function formatReservationDateTime(reservation){
+  const fecha=reservation?.fecha?formatDateDDMMYYYY(reservation.fecha):'Sin fecha';
+  const hora=reservation?.hora||'Sin hora';
+  return `${fecha} · ${hora}`;
+}
+function getReservationReminderLabel(value){
+  const v=String(value??'none');
+  if(v==='10')return'10 minutos antes';
+  if(v==='30')return'30 minutos antes';
+  if(v==='0')return'A la hora';
+  return'Sin recordatorio';
+}
+function normalizeReservationRecord(r){
+  const base=normalizeCobroTargetRecord(r||{});
+  const timestamp=base.reservation_at||base.reservationAt||base.fecha_hora||base.datetime||'';
+  return{
+    ...base,
+    fecha: normalizeBusinessDate(base.fecha||base.reservation_date,timestamp),
+    hora: normalizeBusinessTime(base.hora,timestamp),
+    recordatorio: String(base.recordatorio??base.reminder??base.reminder_minutes??'none')
+  };
+}
 function money2(n){return Math.round((Number(n)||0)*100)/100;}
 function normalizePaymentMethod(method){
   if(method==='ef'||method==='efectivo')return'efectivo';
@@ -1795,7 +1905,7 @@ function normalizeVentaRecord(v){return{...v,fecha:normalizeBusinessDate(v?.fech
 function normalizeCobroTargetRecord(r){return{...r,pago:r?.pago||'ef',payment_mode:normalizePaymentMode(r?.payment_mode,r?.pagos),pagos:normalizeStoredPayments(r?.pagos)};}
 ventas=ventas.map(normalizeVentaRecord);
 mesas=mesas.map(normalizeCobroTargetRecord);
-reservas=reservas.map(normalizeCobroTargetRecord);
+reservas=reservas.map(normalizeReservationRecord);
 function fmtFull(value){const d=value instanceof Date?value:parseLocalDateSafe(value);const D=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return `${D[d.getDay()]} ${d.getDate()} de ${M[d.getMonth()]} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;}
 function fmtShort(value){const d=value instanceof Date?value:parseLocalDateSafe(value);const D=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${D[d.getDay()]} ${d.getDate()} ${M[d.getMonth()]}`;}
 function today(){return getLocalDateString();}
@@ -1805,6 +1915,110 @@ function getCat(id){return cats.find(c=>c.id===id)||{name:'Sin cat',color:'#aaa'
 function showToast(msg,ms=2200){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
 function tipoLabel(t){return t==='salon'?'Salón':t==='delivery'?'Delivery':'Take away';}
 function tipoBadgeClass(t){return t==='salon'?'mesa-tipo-salon':t==='delivery'?'mesa-tipo-delivery':'mesa-tipo-takeaway';}
+function getReservationItemsSummaryForUi(items){
+  return(Array.isArray(items)?items:[]).map(item=>{
+    const p=findProductById(item.prodId);
+    return `${p?.name||item.nombre||'Producto'} x${item.qty||1}`;
+  }).join(' · ');
+}
+function reservationReminderId(reservation){
+  return getReservationIdentityValues(reservation)[0]||String(reservation?.id||reservation?._sb_id||reservation?.legacy_id||'');
+}
+function reservationReminderKey(reservation,targetMs,kind='base'){
+  return `reservationReminder:${reservationReminderId(reservation)}:${kind}:${targetMs}`;
+}
+function reservationSnoozeKey(reservation){return `reservationReminderSnooze:${reservationReminderId(reservation)}`;}
+function reservationReminderDismissed(key){return localStorage.getItem(key)==='dismissed'||localStorage.getItem(key)==='shown';}
+function getReservationReminderOffsetMinutes(reservation){
+  const raw=String(reservation?.recordatorio??'none');
+  if(raw==='10'||raw==='30'||raw==='0')return Number(raw);
+  return null;
+}
+function cleanupReservationReminderState(){
+  const activeIds=new Set((reservas||[]).filter(r=>!RESERVA_INACTIVE_STATUSES.has(normalizeReservaStatus(r.estado||r.status))).flatMap(getReservationIdentityValues));
+  Object.keys(localStorage).forEach(key=>{
+    if(!key.startsWith('reservationReminder'))return;
+    const parts=key.split(':');
+    const id=parts[1]||'';
+    const isOldTime=Number(parts[3])&&Date.now()-Number(parts[3])>7*24*60*60*1000;
+    if((id&&!activeIds.has(id))||isOldTime)localStorage.removeItem(key);
+  });
+}
+function shouldShowReservationReminder(reservation){
+  if(!reservation||RESERVA_INACTIVE_STATUSES.has(normalizeReservaStatus(reservation.estado||reservation.status)))return null;
+  const dateTime=getReservationDateTime(reservation);
+  if(!dateTime)return null;
+  const offset=getReservationReminderOffsetMinutes(reservation);
+  if(offset===null)return null;
+  const now=Date.now();
+  const reservationMs=dateTime.getTime();
+  if(now>reservationMs+60*60*1000)return null;
+  const snoozeMs=Number(localStorage.getItem(reservationSnoozeKey(reservation))||0);
+  if(snoozeMs){
+    if(now<snoozeMs)return null;
+    const snoozeKey=reservationReminderKey(reservation,snoozeMs,'snooze');
+    return reservationReminderDismissed(snoozeKey)?null:{key:snoozeKey,targetMs:snoozeMs,kind:'snooze'};
+  }
+  const targetMs=reservationMs-(offset*60*1000);
+  if(now<targetMs)return null;
+  const key=reservationReminderKey(reservation,targetMs,'base');
+  return reservationReminderDismissed(key)?null:{key,targetMs,kind:'base'};
+}
+function checkReservationReminders(){
+  cleanupReservationReminderState();
+  if($('modal-reserva-reminder')?.classList.contains('open'))return;
+  const due=(reservas||[]).map(r=>({reservation:r,info:shouldShowReservationReminder(r)})).filter(x=>x.info).sort((a,b)=>a.info.targetMs-b.info.targetMs)[0];
+  if(due)showReservationReminder(due.reservation,due.info);
+}
+function scheduleReservationReminders(){
+  if(reservationReminderTimer)return;
+  checkReservationReminders();
+  reservationReminderTimer=setInterval(checkReservationReminders,30000);
+}
+function showReservationReminder(reservation,info){
+  activeReservationReminder={reservation,key:info.key};
+  localStorage.setItem(info.key,'shown');
+  const timeText=reservation.hora||getLocalTimeString(getReservationDateTime(reservation));
+  const itemSummary=getReservationItemsSummaryForUi(reservation.items);
+  const text=$('reserva-reminder-text'),detail=$('reserva-reminder-detail');
+  if(text)text.textContent=`Tenés una reserva para las ${timeText}.`;
+  if(detail)detail.innerHTML=`
+    <strong>${escapeHtml(reservation.nombre||'Reserva')}</strong><br>
+    ${escapeHtml(tipoLabel(reservation.tipo||'salon'))} · ${escapeHtml(formatReservationDateTime(reservation))}
+    ${itemSummary?`<br>${escapeHtml(itemSummary)}`:''}`;
+  $('modal-reserva-reminder')?.classList.add('open');
+  playReservationReminderSound();
+}
+function dismissReservationReminder(){
+  if(activeReservationReminder?.key)localStorage.setItem(activeReservationReminder.key,'dismissed');
+  activeReservationReminder=null;
+  $('modal-reserva-reminder')?.classList.remove('open');
+}
+function snoozeReservationReminder(minutes=10){
+  if(activeReservationReminder?.reservation){
+    const target=Date.now()+minutes*60*1000;
+    localStorage.setItem(reservationSnoozeKey(activeReservationReminder.reservation),String(target));
+    if(activeReservationReminder.key)localStorage.setItem(activeReservationReminder.key,'dismissed');
+  }
+  activeReservationReminder=null;
+  $('modal-reserva-reminder')?.classList.remove('open');
+}
+function playReservationReminderSound(){
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)return;
+    const ctx=new AudioCtx();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.type='sine';osc.frequency.value=740;
+    gain.gain.setValueAtTime(0.001,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.08,ctx.currentTime+.03);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+.22);
+    osc.connect(gain);gain.connect(ctx.destination);osc.start();
+    osc.stop(ctx.currentTime+.24);
+    setTimeout(()=>ctx.close?.(),500);
+  }catch(_){}
+}
 function carritoItemTotal(item){return(item.precio+(item.vars||[]).reduce((s,v)=>s+v.precio,0))*item.qty;}
 function getCartItemVariantsText(item){return(item.vars||[]).map(v=>v.nombre+(v.precio?` +${fmt(v.precio)}`:'')).join(' · ');}
 function carritoTotalFn(c){return Object.values(c).reduce((s,i)=>s+carritoItemTotal(i),0);}
@@ -2534,19 +2748,24 @@ function renderReservasSection(){
   const c=$('reservas-container'),e=$('reservas-empty');if(!c)return;
   let lista=(reservas||[]).filter(isReservationVisibleInCaja);
   lista=ventasFiltroTipo==='todos'?lista:lista.filter(r=>r.tipo===ventasFiltroTipo);
-  lista=[...lista].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  lista=[...lista].sort((a,b)=>`${a.fecha||''} ${a.hora||''}`.localeCompare(`${b.fecha||''} ${b.hora||''}`));
   if(!lista.length){c.innerHTML='';e.style.display='block';return;}
   e.style.display='none';
   c.innerHTML=lista.map(r=>{
-    const prods=(r.items||[]).map(i=>{const p=menu.find(x=>x.id==i.prodId);return p?`${p.name}×${i.qty}`:'?';}).join(', ');
+    const prods=getReservationItemsSummaryForUi(r.items).replaceAll(' · ',', ');
     const total=(r.items||[]).reduce((s,i)=>s+carritoItemTotal(i),0);
+    const reminder=getReservationReminderLabel(r.recordatorio);
     return `<div class="reserva-card ${r.estado||'pendiente'}">
-      <div style="flex-shrink:0"><span class="mesa-tipo-badge ${tipoBadgeClass(r.tipo||'salon')}">${tipoLabel(r.tipo||'salon')}</span></div>
+      <div class="reserva-card-time">
+        <div class="reserva-card-hour">${escapeHtml(r.hora||'--:--')}</div>
+        <div class="reserva-card-date">${escapeHtml(r.fecha?formatDateDDMMYYYY(r.fecha):'Sin fecha')}</div>
+      </div>
       <div class="reserva-info" style="flex:1;min-width:0">
+        <span class="mesa-tipo-badge ${tipoBadgeClass(r.tipo||'salon')}">${tipoLabel(r.tipo||'salon')}</span>
         <div class="reserva-cliente">${r.nombre||'Sin nombre'}</div>
         ${prods?`<div class="reserva-items">${prods}</div>`:''}
         ${total>0?`<div class="reserva-total">${fmt(total)}</div>`:''}
-        ${r.fecha?`<div style="font-size:11px;color:var(--ink3)">📅 ${r.fecha}</div>`:''}
+        <div class="reserva-reminder-meta">${escapeHtml(formatReservationDateTime(r))}${reminder!=='Sin recordatorio'?` · ${escapeHtml(reminder)}`:''}</div>
         ${r.nota?`<div class="reserva-nota">${r.nota}</div>`:''}
         <div class="reserva-actions">
           <button class="btn-sm" onclick="openReservaModal('${escapeJsArg(r.id)}')">Editar</button>
@@ -3134,9 +3353,10 @@ function getEditableReservationStatus(status){
 function renderReservaModalActions(id=null){
   const deleteBtn=id?`<button class="btn-cancel" type="button" onclick="pedirEliminarReserva('${escapeJsArg(id)}')">Eliminar</button>`:`<button class="btn-cancel" type="button" onclick="cerrarModalReserva()">Cancelar</button>`;
   $('reserva-modal-actions').innerHTML=`
+    <div class="reserva-footer-total">Total <strong id="res-total-footer">${fmt(carritoTotalFn(reservaCarrito))}</strong></div>
     ${deleteBtn}
     <button class="btn-save" type="button" onclick="guardarReserva('save')">Guardar reserva</button>
-    <button class="btn-save" type="button" onclick="guardarReserva('charge')" style="grid-column:1/-1;background:var(--green)">Cobrar reserva ahora</button>`;
+    <button class="btn-save" type="button" onclick="guardarReserva('charge')" style="background:var(--green)">Cobrar reserva ahora</button>`;
 }
 
 function openReservaModal(id){
@@ -3149,7 +3369,7 @@ function openReservaModal(id){
     tipoNuevaMesaReserva=r.tipo||'salon';
     ['salon','delivery','takeaway'].forEach(t=>{$(`rtipo-btn-${t}`).className=`tipo-btn${t===tipoNuevaMesaReserva?' sel-'+t:''}`;});
     $('res-nombre').value=r.nombre||'';popularClienteSelectReserva(r.clienteId);
-    $('res-fecha').value=r.fecha||'';$('res-estado').value=getEditableReservationStatus(r.estado||'pendiente');
+    $('res-fecha').value=r.fecha||'';$('res-hora').value=r.hora||'';$('res-recordatorio').value=String(r.recordatorio??'none');
     $('res-nota').value=r.nota||'';
     const search=$('res-prod-search');if(search)search.value='';
     (r.items||[]).forEach((item,i)=>{reservaCarrito[`ri_${i}`]={...item};});
@@ -3159,7 +3379,8 @@ function openReservaModal(id){
     $('reserva-modal-titulo').textContent='Nueva reserva';
     ['res-nombre','res-nota'].forEach(fid=>$(fid).value='');
     const search=$('res-prod-search');if(search)search.value='';
-    $('res-fecha').value=today();$('res-estado').value='pendiente';$('res-cliente').value='';
+    $('res-fecha').value=today();$('res-hora').value='';$('res-recordatorio').value='none';
+    if($('res-cliente'))$('res-cliente').value='';
     renderReservaModalActions(null);
   }
   renderReservaProductoGrid();renderReservaProdChips();renderReservaCarrito();
@@ -3171,7 +3392,7 @@ function captureReservaSnapshot(){
   return{
     editReservaId,tipoNuevaMesaReserva,reservaCarrito:{...reservaCarrito},catReserva,
     nombre:$('res-nombre')?.value||'',clienteId:$('res-cliente')?.value||'',
-    fecha:$('res-fecha')?.value||'',estado:getEditableReservationStatus($('res-estado')?.value||'pendiente'),
+    fecha:$('res-fecha')?.value||'',hora:$('res-hora')?.value||'',recordatorio:$('res-recordatorio')?.value||'none',
     search:$('res-prod-search')?.value||'',
     nota:$('res-nota')?.value||''
   };
@@ -3183,7 +3404,8 @@ function restoreReservaSnapshot(snap){
   ['salon','delivery','takeaway'].forEach(t=>{$(`rtipo-btn-${t}`).className=`tipo-btn${t===tipoNuevaMesaReserva?' sel-'+t:''}`;});
   $('res-nombre').value=snap.nombre;
   $('res-fecha').value=snap.fecha;
-  $('res-estado').value=getEditableReservationStatus(snap.estado);
+  $('res-hora').value=snap.hora||'';
+  $('res-recordatorio').value=snap.recordatorio||'none';
   const search=$('res-prod-search');if(search)search.value=snap.search||'';
   $('res-nota').value=snap.nota;
   renderReservaModalActions(snap.editReservaId||null);
@@ -3227,6 +3449,10 @@ function renderReservaProdChips(){
   el.innerHTML=all.map(c=>`<div class="chip${catReserva===c.id?' active':''}" onclick="setCatReserva('${c.id}')">${c.id!=='todos'?`<span class="chip-dot" style="background:${c.color}"></span>`:''}${c.name}</div>`).join('');
 }
 function setCatReserva(id){catReserva=id;renderReservaProdChips();renderReservaProductoGrid();}
+function updateReservaTotals(){
+  const total=fmt(carritoTotalFn(reservaCarrito));
+  ['res-total','res-total-side','res-total-footer'].forEach(id=>{const el=$(id);if(el)el.textContent=total;});
+}
 function renderReservaProductoGrid(){
   const el=$('res-prod-grid');if(!el)return;
   const rcIds=cats.filter(c=>c.reservable).map(c=>c.id);
@@ -3238,7 +3464,7 @@ function renderReservaProductoGrid(){
     const cat=getCat(p.cat);
     return String(p.name||'').toLowerCase().includes(q)||String(cat?.name||'').toLowerCase().includes(q);
   });
-  if(!list.length){el.innerHTML='<div class="empty" style="grid-column:1/-1">Sin productos</div>';$('res-total').textContent=fmt(carritoTotalFn(reservaCarrito));return;}
+  if(!list.length){el.innerHTML='<div class="empty" style="grid-column:1/-1">Sin productos</div>';updateReservaTotals();return;}
   el.innerHTML=list.map(p=>{
     const productId=getProductFrontId(p);
     const qty=getCartQtyForProduct(reservaCarrito,p),cat=getCat(p.cat),hasVars=(p.variantes||[]).length>0;
@@ -3251,7 +3477,7 @@ function renderReservaProductoGrid(){
     </div>`;
   }).join('');
   attachProductCardHandlers(el,'addItemReserva');
-  $('res-total').textContent=fmt(carritoTotalFn(reservaCarrito));
+  updateReservaTotals();
 }
 function addItemReserva(id){
   const p=findProductById(id);if(!p){logProductDiag('handler reserva no encontró producto',{id});showToast('Producto no encontrado');return;}
@@ -3282,6 +3508,7 @@ function renderReservaCarrito(){
   if(!items.length){
     if(emptyEl)emptyEl.style.display='block';
     rowsEl.innerHTML='';
+    updateReservaTotals();
     return;
   }
   if(emptyEl)emptyEl.style.display='none';
@@ -3306,25 +3533,32 @@ function renderReservaCarrito(){
       <span class="c-sub">${fmt(sub)}</span>
     </div>`;
   }).join('');
-  $('res-total').textContent=fmt(carritoTotalFn(reservaCarrito));
+  updateReservaTotals();
 }
 function cerrarModalReserva(){$('modal-reserva').classList.remove('open');}
 function closeModalReserva(e){if(e.target===$('modal-reserva'))cerrarModalReserva();}
 function guardarReserva(action='save'){
   window.__reservationChargeAfterSave=action==='charge';
   const nombre=($('res-nombre')?.value||'').trim();if(!nombre){window.__reservationChargeAfterSave=false;showToast('Ingresá un nombre');return;}
-  const clienteId=$('res-cliente')?.value;
+  const fecha=$('res-fecha')?.value||'';
+  const hora=$('res-hora')?.value||'';
+  if(!fecha){window.__reservationChargeAfterSave=false;showToast('Elegí una fecha para la reserva.');return;}
+  if(!hora){window.__reservationChargeAfterSave=false;showToast('Elegí una hora para la reserva.');return;}
+  const reservationAt=composeLocalDateTime(fecha,hora);
+  if(!reservationAt){window.__reservationChargeAfterSave=false;showToast('Elegí una hora para la reserva.');return;}
+  const clienteId=$('res-cliente')?.value||'';
   const cli=clientes.find(c=>c.id===clienteId);
   const items=Object.values(reservaCarrito).filter(i=>i.qty>0);
   if(action==='charge'&&!items.length){window.__reservationChargeAfterSave=false;showToast('Agregá al menos un producto para cobrar.');return;}
-  const selectedStatus=getEditableReservationStatus($('res-estado')?.value||'pendiente');
   const data={tipo:tipoNuevaMesaReserva,nombre,clienteId,clienteNombre:cli?cli.nombre:'',
-    fecha:$('res-fecha')?.value,estado:action==='charge'?'pendiente':selectedStatus,nota:$('res-nota')?.value.trim(),
+    fecha,hora,reservation_at:getLocalTimestamp(reservationAt),recordatorio:$('res-recordatorio')?.value||'none',
+    estado:'pendiente',nota:$('res-nota')?.value.trim(),
     items,pago:normalizeNewPaymentMethod(reservaPago||'ef'),payment_mode:'single',pagos:[]};
   if(editReservaId){Object.assign(reservas.find(x=>x.id===editReservaId),data);}
   else{reservas.push({id:'res_'+Date.now(),...data});}
   const saved=editReservaId?reservas.find(x=>sameId(x.id,editReservaId)):reservas[reservas.length-1];
   save();cerrarModalReserva();renderReservasSection();
+  checkReservationReminders();
   return saved;
 }
 
@@ -3706,7 +3940,8 @@ function guardarCliente(){
     reservaCarrito={...snap.reservaCarrito};catReserva=snap.catReserva;
     $('res-nombre').value=snap.nombre;
     $('res-fecha').value=snap.fecha;
-    $('res-estado').value=getEditableReservationStatus(snap.estado);
+    $('res-hora').value=snap.hora||'';
+    $('res-recordatorio').value=snap.recordatorio||'none';
     const search=$('res-prod-search');if(search)search.value=snap.search||'';
     $('res-nota').value=snap.nota;
     popularClienteSelectReserva(newId||snap.clienteId);
@@ -4144,7 +4379,7 @@ function pedirEliminarProductoInline(id){
 // ══════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════
-renderSetupBanner();renderStockAlerts();renderTurnoPill();renderVentas();
+renderSetupBanner();renderStockAlerts();renderTurnoPill();renderVentas();scheduleReservationReminders();
 const hoy=today();
 const dD=$('dash-desde'),dH=$('dash-hasta');if(dD)dD.value=hoy;if(dH)dH.value=hoy;
 // Auto-sincronizar desde Sheets al cargar la app (si hay URL configurada)
@@ -7478,6 +7713,9 @@ if(config.webappUrl){loadFromSheets();}
       clienteId: localCustomerId || '',
       clienteNombre: row.customer_name || raw.clienteNombre || '',
       fecha: row.reservation_date || raw.fecha || '',
+      hora: normalizeBusinessTime(raw.hora,row.reservation_at),
+      reservation_at: row.reservation_at || raw.reservation_at || '',
+      recordatorio: String(raw.recordatorio??row.metadata?.recordatorio??'none'),
       estado: row.status || raw.estado || 'pendiente',
       nota: row.notes || raw.nota || '',
       items,
@@ -7497,7 +7735,7 @@ if(config.webappUrl){loadFromSheets();}
       customer_name: reservation.clienteNombre || reservation.nombre || null,
       service_type: reservation.tipo || 'salon',
       reservation_date: reservation.fecha || null,
-      reservation_at: reservation.fecha ? getLocalTimestamp(parseLocalDateSafe(reservation.fecha)) : null,
+      reservation_at: getReservationTimestamp(reservation),
       status: reservation.estado || 'pendiente',
       products_text: getReservationItemsSummary(items) || null,
       total_amount: getReservationTotal(items),
@@ -7509,6 +7747,9 @@ if(config.webappUrl){loadFromSheets();}
         tipo: reservation.tipo || 'salon',
         nombre: reservation.nombre || '',
         fecha: reservation.fecha || '',
+        hora: reservation.hora || '',
+        reservation_at: getReservationTimestamp(reservation),
+        recordatorio: reservation.recordatorio || 'none',
         estado: reservation.estado || 'pendiente',
         nota: reservation.nota || '',
         clienteNombre: reservation.clienteNombre || '',
@@ -7805,8 +8046,8 @@ if(config.webappUrl){loadFromSheets();}
     });
     try{
       const res=existingRow
-        ? await client.from('reservations').update(payload).eq('id',existingRow.id).eq('store_id',storeId).select('id,store_id,legacy_id,customer_id,legacy_customer_id,customer_name,service_type,reservation_date,status,notes,legacy_raw,payment_mode,payment_method,created_at').single()
-        : await client.from('reservations').insert(payload).select('id,store_id,legacy_id,customer_id,legacy_customer_id,customer_name,service_type,reservation_date,status,notes,legacy_raw,payment_mode,payment_method,created_at').single();
+        ? await client.from('reservations').update(payload).eq('id',existingRow.id).eq('store_id',storeId).select('id,store_id,legacy_id,customer_id,legacy_customer_id,customer_name,service_type,reservation_date,reservation_at,status,notes,legacy_raw,payment_mode,payment_method,created_at').single()
+        : await client.from('reservations').insert(payload).select('id,store_id,legacy_id,customer_id,legacy_customer_id,customer_name,service_type,reservation_date,reservation_at,status,notes,legacy_raw,payment_mode,payment_method,created_at').single();
       console.log('[Reservations <- Supabase]',{
         operation,
         storeId,
