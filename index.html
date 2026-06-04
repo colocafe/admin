@@ -2296,6 +2296,17 @@ function applySmartDashboardRange(filter,message=''){
   updateDashFilterUi(filter);
 }
 function dashRango(){return getDashRangeForFilter(dashFiltro);}
+function countLocalDashboardSales(desde,hasta){return(ventas||[]).filter(v=>v.fecha>=desde&&v.fecha<=hasta).length;}
+function getLocalSmartDashboardRangeForToday(){
+  const hoy=today();
+  const todayRange=getDashRangeForFilter('hoy');
+  if(countLocalDashboardSales(hoy,hoy)>0)return{filter:'hoy',range:todayRange,message:''};
+  const weekRange=getDashRangeForFilter('semana');
+  if(countLocalDashboardSales(weekRange.desde,weekRange.hasta)>0)return{filter:'semana',range:weekRange,message:'Mostrando esta semana — hoy sin actividad'};
+  const monthRange=getDashRangeForFilter('mes');
+  if(countLocalDashboardSales(monthRange.desde,monthRange.hasta)>0)return{filter:'mes',range:monthRange,message:'Mostrando este mes — semana sin actividad'};
+  return null;
+}
 
 // ── Smart default range — se ejecuta una vez por sesión al abrir el dashboard ──
 function ensureSmartDashboardDefaultRange(){
@@ -2305,23 +2316,12 @@ function ensureSmartDashboardDefaultRange(){
   if(typeof window.hasSalesSupabaseReady==='function'&&window.hasSalesSupabaseReady()){
     return;
   }
-  const hoy=today();
-  function countLocal(desde,hasta){return(ventas||[]).filter(v=>v.fecha>=desde&&v.fecha<=hasta).length;}
-  // Si hay ventas hoy: quedarse en 'hoy'
-  if(countLocal(hoy,hoy)>0){dashboardInitialRangeResolved=true;dashboardSmartRangeMessage='';return;}
-  // Si hay ventas esta semana: cambiar a 'semana'
-  const semDesde=getLocalDateString(addLocalDays(new Date(),-6));
-  if(countLocal(semDesde,hoy)>0){
-    applySmartDashboardRange('semana','Mostrando esta semana — hoy sin actividad');
+  const smart=getLocalSmartDashboardRangeForToday();
+  if(smart?.filter==='semana'||smart?.filter==='mes'){
+    applySmartDashboardRange(smart.filter,smart.message);
     return;
   }
-  // Si hay ventas este mes: cambiar a 'mes'
-  const mesDesde=(()=>{const d=new Date();d.setDate(1);return getLocalDateString(d);})();
-  if(countLocal(mesDesde,hoy)>0){
-    applySmartDashboardRange('mes','Mostrando este mes — semana sin actividad');
-    return;
-  }
-  // Sin actividad en ningún período: quedarse en 'hoy'
+  // Con actividad hoy o sin actividad en ningún período: quedarse en 'hoy'
   dashboardInitialRangeResolved=true;
   dashboardSmartRangeMessage='';
 }
@@ -12141,7 +12141,19 @@ if(config.webappUrl){loadFromSheets();}
       if(!silent) showToast((dashboardPreview.partialWarnings&&dashboardPreview.partialWarnings.length)?'No pudimos actualizar el detalle completo. Reintentá.':'Actualizado.');
       return window.getDashboardState();
     }catch(err){
-      const local=buildLocalDashboardDataset(appliedRange);
+      let fallbackRange=appliedRange;
+      const hoy=today();
+      if(!dashboardRangeWasManuallySelected&&!dashboardInitialRangeResolved&&dashFiltro==='hoy'&&appliedRange?.desde===hoy&&appliedRange?.hasta===hoy){
+        const smart=getLocalSmartDashboardRangeForToday();
+        if(smart?.filter==='semana'||smart?.filter==='mes'){
+          applySmartDashboardRange(smart.filter,smart.message);
+          fallbackRange=smart.range;
+        }else{
+          dashboardInitialRangeResolved=true;
+          dashboardSmartRangeMessage='';
+        }
+      }
+      const local=buildLocalDashboardDataset(fallbackRange);
       setDashboardState({...local,lastReadAt:stampSalesMoment(),error:err?.message||String(err)||'Sin conexión',loading:false});
       if(activeTab==='dashboard') renderDashboard();
       renderSalesSupabaseUi();
