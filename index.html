@@ -592,18 +592,62 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reserva-reminder-title{font-family:var(--ff-serif);font-size:24px;color:var(--ink);margin-bottom:10px}
 .reserva-reminder-text{font-size:14px;color:var(--ink2);line-height:1.5;margin-bottom:10px}
 .reserva-reminder-detail{font-size:13px;color:var(--ink);line-height:1.55;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:14px}
+
+/* ── ORDER MODAL SHELL (Mesa + Reserva) ── */
+.order-modal-shell{max-width:1040px!important;height:min(92dvh,760px);max-height:calc(100dvh - 24px);padding:0;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden}
+.order-modal-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 64px 8px 30px}
+.order-modal-header .modal-title{margin:0}
+.order-modal-service{padding:0 30px 14px;border-bottom:1px solid rgba(32,22,11,.07)}
+.order-modal-service .tipo-btns{margin-bottom:0;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;max-width:100%}
+.order-modal-service .tipo-btns::-webkit-scrollbar{display:none}
+.order-modal-service .tipo-btn{white-space:nowrap;flex-shrink:0}
+.order-modal-body{min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;padding:18px 30px}
+.order-modal-main,.order-modal-side{min-height:0;display:flex;flex-direction:column;gap:14px}
+.order-fields{flex-shrink:0}
+.order-product-picker{min-height:0;display:flex;flex-direction:column;gap:8px;flex:1}
+.order-product-tools{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+.order-product-grid-scroll{min-height:0;flex:1;overflow:auto;padding:0 4px 16px 0}
+.order-modal-shell .prod-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:0}
+.order-modal-shell .prod-card{border-radius:var(--r-sm);padding:10px 12px;min-height:78px}
+.order-modal-side{border-left:1px solid var(--border);padding-left:18px;overflow:hidden}
+.order-summary{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;flex:1}
+.order-summary-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.order-summary-title{font-size:13px;font-weight:700;color:var(--ink)}
+.order-items-scroll{min-height:70px;overflow:auto;padding-right:4px}
+.order-items-scroll .cart-row{padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
+.order-items-scroll .cart-row:last-child{border-bottom:none}
+.order-items-scroll .qty-btn{width:24px;height:24px;font-size:14px}
+.order-items-scroll .c-sub{min-width:54px}
+.order-note{flex-shrink:0}
+.order-note textarea{min-height:74px}
+.order-modal-footer{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:10px;padding:14px 30px 18px;border-top:1px solid var(--border);background:rgba(255,252,248,.96)}
+.order-modal-footer .btn-cancel,.order-modal-footer .btn-save{min-width:150px}
+.mesa-setup-box .order-modal-footer{grid-template-columns:1fr auto auto}
 @media(max-width:900px){
   .reserva-modal-box{max-height:94vh}
+  .order-modal-shell{height:min(94dvh,820px);max-height:calc(100dvh - 12px)}
   .reserva-modal-head{padding:18px 56px 8px 18px}
+  .order-modal-header{padding:18px 56px 8px 18px}
   .reserva-service-row{padding:0 18px 12px}
+  .order-modal-service{padding:0 18px 12px}
   .reserva-modal-body{grid-template-columns:1fr;padding:14px 18px 14px;overflow-y:auto}
+  .order-modal-body{grid-template-columns:1fr;padding:14px 18px;overflow-y:auto;overflow-x:hidden}
   .reserva-form-grid{grid-template-columns:1fr 1fr}
+  .order-modal-main,.order-modal-side{min-height:auto}
+  .order-product-picker{min-height:auto;flex:0 0 auto}
   .reserva-products-scroll{max-height:320px}
+  .order-product-grid-scroll{overflow:visible;max-height:none;min-height:auto;padding-right:0;padding-bottom:16px}
   .reserva-side-col{border-left:0;border-top:1px solid var(--border);padding-left:0;padding-top:14px}
+  .order-modal-side{border-left:0;border-top:1px solid var(--border);padding-left:0;padding-top:14px;overflow:visible}
   .reserva-cart-scroll{max-height:220px}
+  .order-summary{display:flex;flex-direction:column}
+  .order-items-scroll{max-height:none;overflow:visible}
   .reserva-modal-footer{grid-template-columns:1fr;position:sticky;bottom:0;padding:12px 18px 16px}
+  .order-modal-footer{grid-template-columns:1fr;position:static;padding:12px 18px 16px}
   .mesa-setup-box .reserva-modal-footer{grid-template-columns:1fr}
+  .mesa-setup-box .order-modal-footer{grid-template-columns:1fr}
   .reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{width:100%;min-width:0}
+  .order-modal-footer .btn-cancel,.order-modal-footer .btn-save{width:100%;min-width:0}
 }
 @media(max-width:560px){
   .reserva-form-grid{grid-template-columns:1fr}
@@ -1116,50 +1160,52 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 
 <!-- MODAL: NUEVA MESA -->
 <div class="modal-ov" id="modal-nueva-mesa" onclick="closeModalNuevaMesa(event)">
-  <div class="modal-box reserva-modal-box mesa-setup-box">
+  <div class="modal-box reserva-modal-box order-modal-shell mesa-setup-box">
     <div class="modal-close" onclick="cerrarModalNuevaMesa()">×</div>
-    <div class="reserva-modal-head">
+    <div class="reserva-modal-head order-modal-header">
       <div class="modal-title">Nueva mesa</div>
     </div>
-    <div class="reserva-service-row">
+    <div class="reserva-service-row order-modal-service">
       <div class="tipo-btns">
         <div class="tipo-btn" id="tipo-btn-salon" onclick="selTipo('salon')">🪑 Salón</div>
         <div class="tipo-btn" id="tipo-btn-delivery" onclick="selTipo('delivery')">🛵 Delivery</div>
         <div class="tipo-btn" id="tipo-btn-takeaway" onclick="selTipo('takeaway')">🥡 Take away</div>
       </div>
     </div>
-    <div class="reserva-modal-body">
-      <div class="reserva-main-col">
-        <div class="reserva-form-grid mesa-setup-form-grid">
+    <div class="reserva-modal-body order-modal-body">
+      <div class="reserva-main-col order-modal-main">
+        <div class="reserva-form-grid mesa-setup-form-grid order-fields">
           <div class="modal-field">
             <label class="modal-lbl">Nombre / identificación</label>
             <input class="modal-input" id="nueva-mesa-input" type="text" placeholder="Mesa 3, Juan García…" maxlength="40">
           </div>
         </div>
-        <div class="reserva-products-panel">
+        <div class="reserva-products-panel order-product-picker">
           <label class="modal-lbl">Productos</label>
-          <div class="reserva-products-tools">
+          <div class="reserva-products-tools order-product-tools">
             <input class="inv-search" id="mesa-prod-search" type="search" placeholder="Buscar producto…" oninput="renderMesaSetupProductoGrid()">
             <div id="mesa-prod-chips" class="cat-chips"></div>
           </div>
-          <div class="prod-grid reserva-products-scroll" id="mesa-prod-grid"></div>
+          <div class="prod-grid reserva-products-scroll order-product-grid-scroll" id="mesa-prod-grid"></div>
         </div>
       </div>
-      <div class="reserva-side-col">
-        <div class="reserva-summary-head">
-          <div class="reserva-summary-title">Pedido</div>
-        </div>
-        <div id="mesa-carrito-wrap" class="reserva-cart-scroll">
-          <div id="mesa-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:12px 0">Todavía no agregaste productos a la mesa.</div>
-          <div id="mesa-carrito-rows"></div>
-        </div>
-        <div class="modal-field reserva-note">
-          <label class="modal-lbl">Nota</label>
-          <textarea class="modal-textarea" id="mesa-nota" placeholder="Notas del pedido…"></textarea>
+      <div class="reserva-side-col order-modal-side">
+        <div class="order-summary">
+          <div class="reserva-summary-head order-summary-header">
+            <div class="reserva-summary-title order-summary-title">Pedido</div>
+          </div>
+          <div id="mesa-carrito-wrap" class="reserva-cart-scroll order-items-scroll">
+            <div id="mesa-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:12px 0">Todavía no agregaste productos a la mesa.</div>
+            <div id="mesa-carrito-rows"></div>
+          </div>
+          <div class="modal-field reserva-note order-note">
+            <label class="modal-lbl">Nota</label>
+            <textarea class="modal-textarea" id="mesa-nota" placeholder="Notas del pedido…"></textarea>
+          </div>
         </div>
       </div>
     </div>
-    <div id="mesa-modal-actions" class="reserva-modal-footer"></div>
+    <div id="mesa-modal-actions" class="reserva-modal-footer order-modal-footer"></div>
   </div>
 </div>
 
@@ -1268,21 +1314,21 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 
 <!-- MODAL: RESERVA (con productos múltiples) -->
 <div class="modal-ov" id="modal-reserva" onclick="closeModalReserva(event)">
-  <div class="modal-box reserva-modal-box">
+  <div class="modal-box reserva-modal-box order-modal-shell">
     <div class="modal-close" onclick="cerrarModalReserva()">×</div>
-    <div class="reserva-modal-head">
+    <div class="reserva-modal-head order-modal-header">
       <div class="modal-title" id="reserva-modal-titulo">Reserva</div>
     </div>
-    <div class="reserva-service-row">
+    <div class="reserva-service-row order-modal-service">
       <div class="tipo-btns">
         <div class="tipo-btn" id="rtipo-btn-salon" onclick="selReservaTipo('salon')">🪑 Salón</div>
         <div class="tipo-btn" id="rtipo-btn-delivery" onclick="selReservaTipo('delivery')">🛵 Delivery</div>
         <div class="tipo-btn" id="rtipo-btn-takeaway" onclick="selReservaTipo('takeaway')">🥡 Take away</div>
       </div>
     </div>
-    <div class="reserva-modal-body">
-      <div class="reserva-main-col">
-        <div class="reserva-form-grid">
+    <div class="reserva-modal-body order-modal-body">
+      <div class="reserva-main-col order-modal-main">
+        <div class="reserva-form-grid order-fields">
           <div class="modal-field">
             <label class="modal-lbl">Nombre / identificación</label>
             <input class="modal-input" id="res-nombre" type="text" placeholder="Juan García, Cumpleaños…" maxlength="60">
@@ -1305,26 +1351,28 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
             </select>
           </div>
         </div>
-        <div class="reserva-products-panel">
+        <div class="reserva-products-panel order-product-picker">
           <label class="modal-lbl">Productos reservados</label>
-          <div class="reserva-products-tools">
+          <div class="reserva-products-tools order-product-tools">
             <input class="inv-search" id="res-prod-search" type="search" placeholder="Buscar producto…" oninput="renderReservaProductoGrid()">
             <div id="res-prod-chips" class="cat-chips"></div>
           </div>
-          <div class="prod-grid reserva-products-scroll" id="res-prod-grid"></div>
+          <div class="prod-grid reserva-products-scroll order-product-grid-scroll" id="res-prod-grid"></div>
         </div>
       </div>
-      <div class="reserva-side-col">
-        <div class="reserva-summary-head">
-          <div class="reserva-summary-title">Pedido</div>
-        </div>
-        <div id="res-carrito-wrap" class="reserva-cart-scroll">
-          <div id="res-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:18px 0">Todavía no agregaste productos a la reserva.</div>
-          <div id="res-carrito-rows"></div>
-        </div>
-        <div class="modal-field reserva-note">
-          <label class="modal-lbl">Nota</label>
-          <textarea class="modal-textarea" id="res-nota" placeholder="Canelones veganos, alergia a maní…"></textarea>
+      <div class="reserva-side-col order-modal-side">
+        <div class="order-summary">
+          <div class="reserva-summary-head order-summary-header">
+            <div class="reserva-summary-title order-summary-title">Pedido</div>
+          </div>
+          <div id="res-carrito-wrap" class="reserva-cart-scroll order-items-scroll">
+            <div id="res-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:18px 0">Todavía no agregaste productos a la reserva.</div>
+            <div id="res-carrito-rows"></div>
+          </div>
+          <div class="modal-field reserva-note order-note">
+            <label class="modal-lbl">Nota</label>
+            <textarea class="modal-textarea" id="res-nota" placeholder="Canelones veganos, alergia a maní…"></textarea>
+          </div>
         </div>
         <!-- Forma de pago (para cuando se confirma como venta) -->
         <div id="res-pago-wrap" style="display:none">
@@ -1336,7 +1384,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         </div>
       </div>
     </div>
-    <div id="reserva-modal-actions" class="reserva-modal-footer"></div>
+    <div id="reserva-modal-actions" class="reserva-modal-footer order-modal-footer"></div>
   </div>
 </div>
 
