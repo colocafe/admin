@@ -549,9 +549,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reserva-card.confirmada{border-color:var(--green)}
 .reserva-card.pagada{border-color:var(--blue)}
 .reserva-card.cancelada{border-color:var(--border2);opacity:.7}
-.reserva-card-time{width:56px;flex-shrink:0;text-align:center;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 6px}
-.reserva-card-hour{font-size:15px;font-weight:700;color:var(--ink);line-height:1}
-.reserva-card-date{font-size:10px;color:var(--ink3);margin-top:4px}
+.reserva-mainline{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.reserva-meta-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--ink3);margin-top:5px}
+.reserva-meta-line .mesa-tipo-badge{margin:0}
+.reserva-meta-dot{color:var(--ink3)}
 .reserva-reminder-meta{font-size:11px;color:var(--ink3);margin-top:3px}
 
 /* ── RESERVA MODAL OPTIMIZADO ── */
@@ -769,11 +770,25 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 .cat-reserva-toggle input{width:14px;height:14px;accent-color:var(--orange);cursor:pointer}
 
 /* ── GASTOS ── */
+.gasto-modal-box{max-width:460px}
+.gasto-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}
+.gasto-modal-head .modal-title{margin:0}
+.gasto-modal-sub{font-size:12px;color:var(--ink3);margin-top:4px;line-height:1.4}
+.gasto-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gasto-form-grid .wide{grid-column:1/-1}
+.gasto-status-note{font-size:11px;color:var(--ink3);line-height:1.45;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 10px;margin-top:4px}
 .gasto-row{background:var(--surf);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;margin-bottom:6px;display:flex;gap:12px;align-items:center}
 .gasto-info{flex:1;min-width:0}
 .gasto-desc{font-size:13px;font-weight:500}
 .gasto-meta{font-size:11px;color:var(--ink3);margin-top:2px}
 .gasto-monto{font-size:14px;font-weight:500;color:var(--red);flex-shrink:0}
+.sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;line-height:1;padding:4px 7px;border-radius:999px;border:1px solid var(--border2);background:var(--surf2);color:var(--ink3);white-space:nowrap}
+.sync-badge.pending{background:var(--amber-bg);border-color:rgba(138,90,0,.22);color:var(--amber)}
+.sync-badge.error{background:var(--red-bg);border-color:rgba(176,48,48,.22);color:var(--red)}
+.sync-badge.ok{background:var(--green-bg);border-color:rgba(26,122,74,.22);color:var(--green)}
+.sync-help{font-size:10px;color:var(--ink3);margin-top:3px}
+.mesa-sync-row,.reserva-sync-row,.gasto-sync-row{margin-top:6px}
+@media(max-width:560px){.gasto-form-grid{grid-template-columns:1fr}.gasto-modal-box{max-width:calc(100vw - 22px)}}
 /* ── DASHBOARD RESULTADO ── */
 .resultado-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px}
 .resultado-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
@@ -1477,17 +1492,36 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 
 <!-- MODAL: GASTO -->
 <div class="modal-ov" id="modal-gasto" onclick="closeModalGasto(event)">
-  <div class="modal-box" style="max-width:380px">
+  <div class="modal-box gasto-modal-box">
     <div class="modal-close" onclick="cerrarModalGasto()">×</div>
-    <div class="modal-title">Registrar gasto</div>
-    <div class="modal-field">
-      <label class="modal-lbl">Descripción</label>
-      <input class="modal-input" id="gasto-desc" type="text" placeholder="Ej: Harina, gas, sueldo…">
+    <div class="gasto-modal-head">
+      <div>
+        <div class="modal-title">Nuevo gasto</div>
+        <div class="gasto-modal-sub">Registrá el gasto con datos claros para revisarlo después.</div>
+      </div>
     </div>
-    <div class="modal-2col">
+    <div class="gasto-form-grid">
+      <div class="modal-field wide">
+        <label class="modal-lbl">Descripción</label>
+        <input class="modal-input" id="gasto-desc" type="text" placeholder="Ej: Harina, gas, sueldo">
+      </div>
       <div class="modal-field">
         <label class="modal-lbl">Monto ($)</label>
-        <input class="modal-input" id="gasto-monto" type="number" placeholder="0" min="0">
+        <input class="modal-input" id="gasto-monto" type="number" placeholder="0" min="0" step="0.01">
+      </div>
+      <div class="modal-field">
+        <label class="modal-lbl">Categoría</label>
+        <select class="modal-select" id="gasto-cat">
+          <option value="insumos">Insumos</option>
+          <option value="servicios">Servicios</option>
+          <option value="sueldos">Sueldos</option>
+          <option value="mantenimiento">Mantenimiento</option>
+          <option value="otros">Otros</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-lbl">Fecha</label>
+        <input class="modal-input" id="gasto-fecha" type="date">
       </div>
       <div class="modal-field">
         <label class="modal-lbl">Medio de pago</label>
@@ -1496,14 +1530,15 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
           <option value="transferencia">Transferencia</option>
         </select>
       </div>
+      <div class="modal-field wide">
+        <label class="modal-lbl">Nota opcional</label>
+        <textarea class="modal-input" id="gasto-nota" rows="3" placeholder="Detalle útil para revisar este gasto"></textarea>
+      </div>
     </div>
-    <div class="modal-field">
-      <label class="modal-lbl">Fecha</label>
-      <input class="modal-input" id="gasto-fecha" type="date">
-    </div>
+    <div class="gasto-status-note">El gasto se marca como registrado cuando queda confirmado. Si hay un problema de conexión, queda pendiente en este dispositivo.</div>
     <div class="modal-actions">
       <button class="btn-cancel" type="button" onclick="cerrarModalGasto()">Cancelar</button>
-      <button class="btn-save" type="button" onclick="guardarGasto()">Guardar</button>
+      <button class="btn-save" type="button" onclick="guardarGasto()">Guardar gasto</button>
     </div>
   </div>
 </div>
@@ -2521,7 +2556,12 @@ window._addOperadorFromAjustes=async function(){
 // ══════════════════════════════════════════════════
 function renderTurnoPill(){
   const pill=$('turno-pill');if(!pill)return;
-  if(turno&&turno.abierto){pill.innerHTML=`<span class="turno-dot on"></span>${turno.operador}`;pill.className='turno-pill abierto';}
+  if(turno&&turno.abierto){
+    const status=turno._sync_status||(!turno._sb_id?'pending':'confirmed');
+    const label=status==='confirmed'?'':` · ${status==='error'?'Error al sincronizar':'Pendiente de sincronizar'}`;
+    pill.innerHTML=`<span class="turno-dot on"></span>${escapeHtml(turno.operador||'Turno')}${label?`<span style="font-weight:700">${label}</span>`:''}`;
+    pill.className='turno-pill abierto';
+  }
   else{pill.innerHTML=`<span class="turno-dot"></span>Sin turno`;pill.className='turno-pill';}
 }
 async function openTurnoModal(){
@@ -2575,8 +2615,9 @@ async function abrirTurno(){
     const existing=getOperatorByName(op);
     operatorId=existing?.id||'';
   }
-  turno={abierto:true,operador:op,operator_id:operatorId||null,metadata:{operator_id:operatorId||null},fondoCaja:parseFloat($('turno-fondo')?.value)||0,apertura:nowISO(),ventasIds:[]};
-  save();syncTurnoSheets();cerrarModalTurno();renderTurnoPill();showToast(`✓ Turno abierto — ${op}`);
+  turno={abierto:true,operador:op,operator_id:operatorId||null,metadata:{operator_id:operatorId||null},fondoCaja:parseFloat($('turno-fondo')?.value)||0,apertura:nowISO(),ventasIds:[],_sync_status:'pending',_sync_error:''};
+  save();syncTurnoSheets();cerrarModalTurno();renderTurnoPill();
+  if(!window.__shiftRemoteGuardActive) showToast(`Turno abierto. Pendiente de sincronizar.`);
 }
 
 function mostrarResumenTurno(){
@@ -2615,7 +2656,8 @@ async function cerrarTurno(ef,mp,tr,otro,tot,cafe,cocina){
   const turnoCerrado={...turno,ventasIds:[...(turno.ventasIds||[])]};
   const cierre=new Date();
   const r={fecha:getLocalDateString(cierre),operador:turnoCerrado.operador,apertura:turnoCerrado.apertura,cierre:getLocalTimestamp(cierre),fondoCaja:turnoCerrado.fondoCaja,totalEf:ef,totalMp:mp,totalTransferencia:tr,totalOtro:otro,total:tot,totalCafeteria:cafe,totalCocina:cocina};
-  turno=null;save();renderTurnoPill();showToast('✓ Turno cerrado');
+  turno=null;save();renderTurnoPill();
+  if(!window.__shiftRemoteGuardActive) showToast('Turno cerrado. Revisá la sincronización cuando vuelva la conexión.');
   await sheetsPost({action:'addTurno',row:r});
 }
 
@@ -2707,6 +2749,8 @@ function renderStockAlerts(){
 function openGastoModal(){
   $('gasto-desc').value='';$('gasto-monto').value='';
   $('gasto-fecha').value=today();$('gasto-pago').value='efectivo';
+  if($('gasto-cat'))$('gasto-cat').value='insumos';
+  if($('gasto-nota'))$('gasto-nota').value='';
   $('modal-gasto').classList.add('open');
   setTimeout(()=>$('gasto-desc').focus(),100);
 }
@@ -2722,7 +2766,9 @@ async function guardarGasto(){
     hora: nowT(),
     desc,
     monto,
-    pago: $('gasto-pago').value
+    pago: $('gasto-pago').value,
+    categoria: $('gasto-cat')?.value||'otros',
+    nota: ($('gasto-nota')?.value||'').trim()
   };
   cerrarModalGasto();
   await loadOperatorsFromSupabase();
@@ -2750,15 +2796,62 @@ async function confirmarGastoOperador(){
   if(sel?.value==='__nuevo__'&&!isSupabaseAdminRole()){showToast('No tenés permiso para crear operadores');return;}
   if(!operadores.includes(op)){ operadores.push(op); save(); syncOperadoresSheets(); }
   if(sel?.value==='__nuevo__'){
-    const saved=await saveOperatorToSupabase(op);
-    operatorId=saved?.id||'';
+    try{
+      const saved=await saveOperatorToSupabase(op);
+      operatorId=saved?.id||'';
+    }catch(err){
+      operatorId='';
+      console.error('[confirmarGastoOperador -> saveOperatorToSupabase failed]',{
+        operador:op,
+        message:err?.message||String(err),
+        code:err?.code||'',
+        details:err?.details||'',
+        hint:err?.hint||''
+      });
+    }
   }else if(!operatorId){
     operatorId=getOperatorByName(op)?.id||'';
   }
   const pending=JSON.parse($('modal-gasto-operador').dataset.pending||'{}');
-  const g={id:'g_'+Date.now(),...pending,operador:op,_operator_id:operatorId||null,metadata:{operator_id:operatorId||null}};
-  gastos.push(g); save(); cerrarModalGastoOperador(); renderGastos(); syncGastosSheets();
-  showToast('✓ Gasto registrado');
+  const g={id:'g_'+Date.now(),...pending,operador:op,_operator_id:operatorId||null,_sync_status:'pending',_sync_error:'',metadata:{operator_id:operatorId||null,expense_category:pending.categoria||'otros',persistence_status:'pending_local'}};
+  try{
+    gastos.push(g); save(); cerrarModalGastoOperador(); renderGastos(); syncGastosSheets();
+  }catch(err){
+    console.error('[confirmarGastoOperador -> local preserve failed]',{
+      expense:{...g},
+      message:err?.message||String(err),
+      code:err?.code||'',
+      details:err?.details||'',
+      hint:err?.hint||''
+    });
+    showToast('No pudimos guardar el gasto. Reintentá.');
+    return null;
+  }
+  return g;
+}
+function getPersistenceStatusInfo(record,{localWhenNoRemoteId=false,showConfirmed=false}={}){
+  if(!record) return null;
+  const raw=String(record._sync_status||record._persistence_status||record.metadata?.persistence_status||'').toLowerCase();
+  if(raw==='confirmed'||raw==='synced'||raw==='remote_confirmed') return {cls:'ok',label:'Confirmado',help:'Actualizado.'};
+  if(raw==='error'||raw==='failed'||raw==='sync_error') return {cls:'error',label:'Error al sincronizar',help:'Reintentar'};
+  if(raw==='pending'||raw==='pending_local'||record._syncing) return {cls:'pending',label:'Pendiente de sincronizar',help:'No cierres la app hasta que se sincronice.'};
+  if(localWhenNoRemoteId && !record._sb_id) return {cls:'pending',label:'Pendiente de sincronizar',help:'No cierres la app hasta que se sincronice.'};
+  if(showConfirmed && record._sb_id) return {cls:'ok',label:'Confirmado',help:'Actualizado.'};
+  return null;
+}
+function renderSyncBadge(record,opts={}){
+  const info=getPersistenceStatusInfo(record,opts);
+  return info?`<span class="sync-badge ${info.cls}">${escapeHtml(info.label)}</span>`:'';
+}
+function renderSyncHelp(record,opts={}){
+  const info=getPersistenceStatusInfo(record,opts);
+  return info?.help?`<div class="sync-help">${escapeHtml(info.help)}</div>`:'';
+}
+function countPersistencePending(list,opts={}){
+  return (Array.isArray(list)?list:[]).filter(item=>{
+    const info=getPersistenceStatusInfo(item,opts);
+    return info&&info.cls!=='ok';
+  }).length;
 }
 function renderGastos(){
   const el=$('gastos-lista');if(!el)return;
@@ -2766,8 +2859,10 @@ function renderGastos(){
   if(!lista.length){el.innerHTML='<div class="empty">No hay gastos registrados</div>';return;}
   el.innerHTML=lista.map(g=>`<div class="gasto-row">
     <div class="gasto-info">
-      <div class="gasto-desc">${g.desc}</div>
-      <div class="gasto-meta">${g.fecha}${g.hora?' · '+g.hora:''} · ${g.pago==='efectivo'?'Efectivo':'Transferencia'}${g.operador?' · '+g.operador:''}</div>
+      <div class="gasto-desc">${escapeHtml(g.desc||'Gasto')}</div>
+      <div class="gasto-meta">${escapeHtml(g.fecha||'')}${g.hora?' · '+escapeHtml(g.hora):''} · ${escapeHtml(g.categoria?g.categoria[0].toUpperCase()+g.categoria.slice(1):'Otros')} · ${g.pago==='efectivo'?'Efectivo':'Transferencia'}${g.operador?' · '+escapeHtml(g.operador):''}</div>
+      ${g.nota?`<div class="gasto-meta">${escapeHtml(g.nota)}</div>`:''}
+      ${renderSyncBadge(g,{localWhenNoRemoteId:true})?`<div class="gasto-sync-row">${renderSyncBadge(g,{localWhenNoRemoteId:true})}${renderSyncHelp(g,{localWhenNoRemoteId:true})}</div>`:''}
     </div>
     <div class="gasto-monto">−${fmt(g.monto)}</div>
   </div>`).join('');
@@ -2828,11 +2923,14 @@ function renderMesasSection(){
     const items=Object.values(m.items||{}).reduce((s,v)=>s+(v.qty||0),0);
     const total=Object.values(m.items||{}).reduce((s,v)=>s+carritoItemTotal(v),0);
     const syncing=m._syncing||(!m._sb_id&&ooSync?.ready);
+    const syncRecord={...m,_sync_status:m._sync_status||(syncing?'pending':'')};
+    const syncBadge=renderSyncBadge(syncRecord,{localWhenNoRemoteId:true});
     const openId=getMesaOpenOrderId(m);
     return `<div class="mesa-card ${items>0?'con-items':'sin-items'}" onclick="abrirMesa('${escapeJsArg(openId)}')">
       <span class="mesa-tipo-badge ${tipoBadgeClass(m.tipo||'salon')}">${tipoLabel(m.tipo||'salon')}</span>
-      <div class="mesa-nombre">${m.nombre}</div>
+      <div class="mesa-nombre">${escapeHtml(m.nombre||'Mesa')}</div>
       <div class="mesa-items">${items} ítem${items!==1?'s':''}${syncing?' · guardando…':''}</div>
+      ${syncBadge?`<div class="mesa-sync-row">${syncBadge}${renderSyncHelp(syncRecord,{localWhenNoRemoteId:true})}</div>`:''}
       <div class="mesa-total">${items>0?fmt(total):'—'}</div>
       <div class="mesa-close" onclick="event.stopPropagation();pedirEliminarMesa('${escapeJsArg(openId)}')">×</div>
     </div>`;
@@ -2850,24 +2948,31 @@ function renderReservasSection(){
     const prods=getReservationItemsSummaryForUi(r.items).replaceAll(' · ',', ');
     const total=(r.items||[]).reduce((s,i)=>s+carritoItemTotal(i),0);
     const reminder=getReservationReminderLabel(r.recordatorio);
+    const syncRecord={...r,_sync_status:r._sync_status||(isReservationPending(r)?'pending':'')};
+    const syncBadge=renderSyncBadge(syncRecord,{localWhenNoRemoteId:true});
+    const status=String(r.estado||'pendiente');
+    const meta=[
+      `<span class="mesa-tipo-badge ${tipoBadgeClass(r.tipo||'salon')}">${tipoLabel(r.tipo||'salon')}</span>`,
+      `<span>${escapeHtml(r.hora||'Sin hora')}</span>`,
+      `<span>${escapeHtml(r.fecha?formatDateDDMMYYYY(r.fecha):'Sin fecha')}</span>`,
+      reminder!=='Sin recordatorio'?`<span>${escapeHtml(reminder)}</span>`:''
+    ].filter(Boolean).join('<span class="reserva-meta-dot">·</span>');
     return `<div class="reserva-card ${r.estado||'pendiente'}">
-      <div class="reserva-card-time">
-        <div class="reserva-card-hour">${escapeHtml(r.hora||'--:--')}</div>
-        <div class="reserva-card-date">${escapeHtml(r.fecha?formatDateDDMMYYYY(r.fecha):'Sin fecha')}</div>
-      </div>
       <div class="reserva-info" style="flex:1;min-width:0">
-        <span class="mesa-tipo-badge ${tipoBadgeClass(r.tipo||'salon')}">${tipoLabel(r.tipo||'salon')}</span>
-        <div class="reserva-cliente">${r.nombre||'Sin nombre'}</div>
-        ${prods?`<div class="reserva-items">${prods}</div>`:''}
+        <div class="reserva-mainline">
+          <div class="reserva-cliente">${escapeHtml(r.nombre||'Sin nombre')}</div>
+          <span class="reserva-estado ${status}">${escapeHtml(status)}</span>
+        </div>
+        <div class="reserva-meta-line">${meta}</div>
+        ${syncBadge?`<div class="reserva-sync-row">${syncBadge}${renderSyncHelp(syncRecord,{localWhenNoRemoteId:true})}</div>`:''}
+        ${prods?`<div class="reserva-items">${escapeHtml(prods)}</div>`:''}
         ${total>0?`<div class="reserva-total">${fmt(total)}</div>`:''}
-        <div class="reserva-reminder-meta">${escapeHtml(formatReservationDateTime(r))}${reminder!=='Sin recordatorio'?` · ${escapeHtml(reminder)}`:''}</div>
-        ${r.nota?`<div class="reserva-nota">${r.nota}</div>`:''}
+        ${r.nota?`<div class="reserva-nota">${escapeHtml(r.nota)}</div>`:''}
         <div class="reserva-actions">
           <button class="btn-sm" onclick="openReservaModal('${escapeJsArg(r.id)}')">Editar</button>
           <button class="btn-sm primary" onclick="abrirReservaComoVenta('${escapeJsArg(r.id)}')">→ Cobrar</button>
         </div>
       </div>
-      <span class="reserva-estado ${r.estado||'pendiente'}">${r.estado||'pendiente'}</span>
     </div>`;
   }).join('');
 }
@@ -3731,7 +3836,9 @@ function guardarReserva(action='save'){
   if(editReservaId){Object.assign(reservas.find(x=>x.id===editReservaId),data);}
   else{reservas.push({id:'res_'+Date.now(),...data});}
   const saved=editReservaId?reservas.find(x=>sameId(x.id,editReservaId)):reservas[reservas.length-1];
-  save();cerrarModalReserva();renderReservasSection();
+  save();
+  if(!window.__reservationRemoteGuardActive) cerrarModalReserva();
+  renderReservasSection();
   checkReservationReminders();
   return saved;
 }
@@ -4902,11 +5009,18 @@ if(config.webappUrl){loadFromSheets();}
   };
   window.supportRetryPendingData=async function(){
     if(!window.canShowClientTechnicalUi?.()){showToast('Herramienta disponible sólo en modo técnico.');return;}
-    const tasks=[window.retryPendingSalesSync?.()].filter(Boolean);
+    const tasks=[
+      window.retryPendingSalesSync?.(),
+      window.syncLocalExpensesToSupabase?.(),
+      window.syncLocalReservationsToSupabase?.(),
+      window.retryPendingOpenOrdersSync?.({silent:true}),
+      (turno&&turno.abierto&&(!turno._sb_id||turno._sync_status==='pending'||turno._sync_status==='error'))?window.syncLocalShiftToSupabase?.():null
+    ].filter(Boolean);
     if(!tasks.length){showToast('No hay reintentos disponibles.');return;}
     const results=await Promise.allSettled(tasks);
     const failed=results.filter(r=>r.status==='rejected').length;
     setSupportLastResult(failed?'Reintento finalizado con avisos.':'Reintento finalizado.');
+    showToast(failed?'Reintento finalizado con avisos.':'Actualizado.');
   };
   function supportButton(label,onclick,kind='ghost'){
     return `<button class="btn ${kind}" type="button" onclick="${onclick}">${label}</button>`;
@@ -4943,6 +5057,11 @@ if(config.webappUrl){loadFromSheets();}
     const dashboardState=window.getDashboardState?.()||{};
     const ooState=window.getOpenOrdersSyncState?.()||{};
     const pendingSales=window.findPendingSalesSyncGroups?.(ventas||[])?.length||0;
+    const pendingExpenses=countPersistencePending(gastos,{localWhenNoRemoteId:true});
+    const pendingReservations=countPersistencePending(reservas,{localWhenNoRemoteId:true});
+    const pendingTables=(mesas||[]).filter(m=>m&&((!m._sb_id)||m._syncing)).length;
+    const pendingShift=(turno&&turno.abierto&&(!turno._sb_id||turno._sync_status==='pending'||turno._sync_status==='error'))?1:0;
+    const pendingDataTotal=pendingSales+pendingExpenses+pendingReservations+pendingTables+pendingShift;
     const lastResult=window.__supportLastResult;
     if(!canTech){
       techSection.innerHTML=`<div class="accordion-item" style="margin-bottom:10px">
@@ -4972,13 +5091,17 @@ if(config.webappUrl){loadFromSheets();}
         supportMetric('Sesión', loggedIn?'Activa':'No iniciada')+
         supportMetric('Tienda activa', activeStore?.name||'Sin tienda')+
         supportMetric('Rol', role||'—')+
-        supportMetric('Datos pendientes', pendingSales)+
+        supportMetric('Datos pendientes', pendingDataTotal)+
         supportMetric('Última actualización', lastResult?`${lastResult.at} · ${lastResult.message}`:'—'),
         supportButton('Revisar estado','supportDiagnoseSynchronization()')+
         supportButton('Actualizar datos ahora','supportRefreshAllData()','alt'),
         generalDetails),
       supportCard('Sincronización','Usá esta sección si una venta, reserva, gasto o mesa no aparece actualizada.',
         supportMetric('Ventas pendientes', pendingSales)+
+        supportMetric('Gastos pendientes', pendingExpenses)+
+        supportMetric('Reservas pendientes', pendingReservations)+
+        supportMetric('Mesas pendientes', pendingTables)+
+        supportMetric('Turno pendiente', pendingShift)+
         supportMetric('Mesas abiertas', ooState.openOrders??(mesas||[]).length)+
         supportMetric('Último intento', ooState.lastRefreshEndedAt||historyState.lastReadAt||dashboardState.lastReadAt||'—')+
         supportMetric('Último resultado', lastResult?.message||'—'),
@@ -6097,6 +6220,34 @@ if(config.webappUrl){loadFromSheets();}
     if(typeof window.save==='function')window.save();
     return ok;
   }
+  window.retryPendingOpenOrdersSync=async function({silent=false}={}){
+    const pending=(mesas||[]).filter(m=>m&&((!m._sb_id)||m._syncing));
+    if(!pending.length){
+      if(!silent)showToast('No hay mesas pendientes.');
+      return {ok:true,total:0,synced:0,failed:0};
+    }
+    const summary={ok:true,total:pending.length,synced:0,failed:0,errors:[]};
+    for(const mesa of pending){
+      try{
+        const ok=await syncMesaToSupabase(mesa);
+        if(ok) summary.synced++;
+        else{
+          summary.failed++;
+          summary.ok=false;
+          mesa._syncing=true;
+        }
+      }catch(err){
+        summary.failed++;
+        summary.ok=false;
+        mesa._syncing=true;
+        summary.errors.push({mesa:mesa.nombre||mesa.id,message:err?.message||String(err),code:err?.code||'',details:err?.details||'',hint:err?.hint||''});
+        console.error('[retryPendingOpenOrdersSync failed]',{mesa:{...mesa},message:err?.message||String(err),code:err?.code||'',details:err?.details||'',hint:err?.hint||''});
+      }
+    }
+    save();renderMesasSection();
+    if(!silent) showToast(summary.failed?`Quedaron ${summary.failed} mesa(s) pendientes. Reintentá.`:'Actualizado.');
+    return summary;
+  };
 
   async function findSoldOpenOrderRows(orderIds,storeId=ooStoreId()){
     const ids=[...new Set((orderIds||[]).map(id=>String(id||'')).filter(Boolean))];
@@ -7895,7 +8046,9 @@ if(config.webappUrl){loadFromSheets();}
       items,
       pago: raw.pago || (row.payment_method==='mercado_pago'?'mp':row.payment_method||'ef'),
       payment_mode: row.payment_mode || raw.payment_mode || 'single',
-      pagos: Array.isArray(raw.pagos)?raw.pagos:[]
+      pagos: Array.isArray(raw.pagos)?raw.pagos:[],
+      _sync_status:'confirmed',
+      _sync_error:''
     };
   }
   function mapReservationToSupabase(reservation,storeId,existingRow,resolvedCustomerSbId){
@@ -8234,6 +8387,8 @@ if(config.webappUrl){loadFromSheets();}
       if(res.error) throw res.error;
       reservation._sb_id=res.data.id;
       reservation.legacy_id=res.data.legacy_id||reservation.legacy_id||(!isValidUuid(String(reservation.id||''))?String(reservation.id):null);
+      reservation._sync_status='confirmed';
+      reservation._sync_error='';
       save();
       crLastSyncAt=stampCrMoment();
       setCrState('supabase');
@@ -8274,7 +8429,12 @@ if(config.webappUrl){loadFromSheets();}
             if(existing) summary.updated++;
             else{ summary.inserted++; existingReservationRows.push(row); }
           }
-        }catch(err){ summary.errors.push(`${reservation.nombre}: ${err.message||err}`); }
+        }catch(err){
+          reservation._sync_status='error';
+          reservation._sync_error=err?.message||String(err);
+          save();
+          summary.errors.push(`${reservation.nombre}: ${err.message||err}`);
+        }
       }
       crLastSyncAt=`reservas ${stampCrMoment()}`;
       setCrState('supabase');
@@ -8692,7 +8852,23 @@ if(config.webappUrl){loadFromSheets();}
       const beforeIds=new Set(reservas.map(r=>String(r.id)));
       const targetId=editReservaId;
       const chargeAfterSave=args[0]==='charge'||window.__reservationChargeAfterSave===true;
-      const res=_guardarReservaCr.apply(this,args);
+      window.__reservationRemoteGuardActive=true;
+      let res=null;
+      try{
+        res=await _guardarReservaCr.apply(this,args);
+      }catch(err){
+        window.__reservationChargeAfterSave=false;
+        console.error('[guardarReserva failed before remote save]',{
+          message:err?.message||String(err),
+          code:err?.code||'',
+          details:err?.details||'',
+          hint:err?.hint||''
+        });
+        showToast('No pudimos guardar la reserva. Revisá la conexión y reintentá.');
+        return null;
+      }finally{
+        window.__reservationRemoteGuardActive=false;
+      }
       window.__reservationChargeAfterSave=false;
       if(!res) return res;
       const reservation=wasEdit ? reservas.find(r=>sameId(r.id,targetId)) : reservas.find(r=>!beforeIds.has(String(r.id)));
@@ -8706,6 +8882,7 @@ if(config.webappUrl){loadFromSheets();}
           await saveReservationToSupabase(reservation);
           clearReservationPending(reservation);
           await syncReservasSheets().catch(()=>false);
+          cerrarModalReserva();
           if(chargeAfterSave){
             showToast('Elegí el medio de pago.');
             renderReservasSection();
@@ -8727,7 +8904,8 @@ if(config.webappUrl){loadFromSheets();}
             details:err?.details||'',
             hint:err?.hint||''
           });
-          showToast('No pudimos guardar la reserva. Reintentá.');
+          showToast('No pudimos guardar la reserva. Revisá la conexión y reintentá.');
+          return null;
         }
       }
       return res;
@@ -8908,7 +9086,10 @@ if(config.webappUrl){loadFromSheets();}
       pago: row.payment_method || 'efectivo',
       operador: row.operator_name || '',
       nota: row.notes || '',
-      metadata: row.metadata || {}
+      categoria: row.metadata?.expense_category || row.metadata?.categoria || 'otros',
+      metadata: row.metadata || {},
+      _sync_status:'confirmed',
+      _sync_error:''
     };
   }
   function mapExpenseToSupabase(expense,storeId,existingRow){
@@ -8936,6 +9117,7 @@ if(config.webappUrl){loadFromSheets();}
         ...(existingRow?.metadata||{}),
         ...(expense?.metadata||{}),
         operator_id: expense?._operator_id || expense?.metadata?.operator_id || null,
+        expense_category: expense?.categoria || expense?.metadata?.expense_category || null,
         local_hora: localTime
       }
     };
@@ -9067,6 +9249,9 @@ if(config.webappUrl){loadFromSheets();}
       expense.legacy_id=res.data.legacy_id||expense.legacy_id||(!window.isValidUuid?.(String(expense.id||'')) ? String(expense.id) : null);
       expense.fecha=res.data.business_date||expense.fecha;
       expense.hora=getLocalTimeString(parseSpentAtSafe(res.data.spent_at,res.data.business_date));
+      expense._sync_status='confirmed';
+      expense._sync_error='';
+      expense.metadata={...(expense.metadata||{}),persistence_status:'remote_confirmed'};
       save();
       expensesLastSyncAt=stampExpensesMoment();
       setExpensesState('supabase');
@@ -9105,6 +9290,10 @@ if(config.webappUrl){loadFromSheets();}
             else{ summary.inserted++; existingRows.push(row); }
           }
         }catch(err){
+          expense._sync_status='error';
+          expense._sync_error=err?.message||String(err);
+          expense.metadata={...(expense.metadata||{}),persistence_status:'sync_error'};
+          save();
           summary.errors.push(`${expense.desc||'Gasto'}: ${err?.message||err}`);
         }
       }
@@ -9306,15 +9495,39 @@ if(config.webappUrl){loadFromSheets();}
   if(typeof _confirmarGastoOperadorExpenses==='function'){
     window.confirmarGastoOperador=async function(...args){
       const beforeIds=new Set(gastos.map(g=>String(g.id)));
-      const res=_confirmarGastoOperadorExpenses.apply(this,args);
+      let res=null;
+      try{
+        res=await _confirmarGastoOperadorExpenses.apply(this,args);
+      }catch(err){
+        console.error('[confirmarGastoOperador failed before local preserve]',{
+          message:err?.message||String(err),
+          code:err?.code||'',
+          details:err?.details||'',
+          hint:err?.hint||''
+        });
+        showToast('No pudimos guardar el gasto. Reintentá.');
+        return null;
+      }
       const expense=gastos.find(g=>!beforeIds.has(String(g.id)));
-      if(expense && hasExpensesSupabaseReady()){
+      if(expense && !hasExpensesSupabaseReady()){
+        expense._sync_status='pending';
+        expense._sync_error='Sin conexión';
+        expense.metadata={...(expense.metadata||{}),persistence_status:'pending_local'};
+        save();renderGastos();
+        showToast('Gasto guardado en este dispositivo. Pendiente de sincronizar.');
+      }else if(expense){
         try{
-          await saveExpenseToSupabase(expense);
+          const remoteExpense=await saveExpenseToSupabase(expense);
+          if(!remoteExpense?.id) throw new Error('No se confirmó el guardado remoto del gasto');
+          renderGastos();
           setTimeout(()=>window.reloadDashboardFromSupabase?.({silent:true,forceRefresh:true}),0);
-          showToast('✓ Gasto registrado');
+          showToast('Gasto registrado.');
         }catch(err){
           const msg=getExpenseSupabaseErrorMessage(err);
+          expense._sync_status='error';
+          expense._sync_error=msg;
+          expense.metadata={...(expense.metadata||{}),persistence_status:'sync_error'};
+          save();renderGastos();
           setExpensesState('error',msg);
           console.error('[confirmarGastoOperador -> saveExpenseToSupabase failed]',{
             expense:{...expense},
@@ -9323,7 +9536,7 @@ if(config.webappUrl){loadFromSheets();}
             details:err?.details||'',
             hint:err?.hint||''
           });
-          showToast('Gasto guardado. Se actualizará cuando vuelva la conexión.');
+          showToast('Gasto guardado en este dispositivo. Pendiente de sincronizar.');
         }
       }
       return res;
@@ -9629,7 +9842,9 @@ if(config.webappUrl){loadFromSheets();}
       _sb_id: row?.id || '',
       legacy_id: row?.legacy_id || null,
       operator_id: row?.metadata?.operator_id || null,
-      metadata: row?.metadata || {}
+      metadata: row?.metadata || {},
+      _sync_status:'confirmed',
+      _sync_error:''
     };
   }
   function mapShiftToSupabase(turnoLocal,session,existingRow){
@@ -9782,6 +9997,8 @@ if(config.webappUrl){loadFromSheets();}
     if(existingRow && !turnoLocal._sb_id){
       turnoLocal._sb_id=existingRow.id;
       turnoLocal.legacy_id=existingRow.legacy_id||turnoLocal.legacy_id||null;
+      turnoLocal._sync_status='confirmed';
+      turnoLocal._sync_error='';
       save();
       shiftsRemoteOpen=true;
       setShiftsState('supabase');
@@ -9798,6 +10015,8 @@ if(config.webappUrl){loadFromSheets();}
       if(res.error) throw res.error;
       turnoLocal._sb_id=res.data.id;
       turnoLocal.legacy_id=res.data.legacy_id||turnoLocal.legacy_id||null;
+      turnoLocal._sync_status='confirmed';
+      turnoLocal._sync_error='';
       save();
       shiftsLastSyncAt=stampShiftsMoment();
       shiftsRemoteOpen=true;
@@ -9862,12 +10081,17 @@ if(config.webappUrl){loadFromSheets();}
       shiftsLastSyncAt=stampShiftsMoment();
       setShiftsState('supabase');
       renderShiftsSupabaseUi();
-      showToast('✓ Turno guardado');
+      showToast('Turno guardado.');
       return true;
     }catch(err){
       console.error('[Shift sync failed]',err);
+      if(turno&&turno.abierto){
+        turno._sync_status='error';
+        turno._sync_error=err?.message||String(err);
+        save();renderTurnoPill();
+      }
       setShiftsState('error',err?.message||String(err));
-      showToast('Turno abierto. Se actualizará cuando vuelva la conexión.');
+      showToast('Turno abierto en este dispositivo. Pendiente de sincronizar.');
       return false;
     }
   };
@@ -10074,17 +10298,33 @@ if(config.webappUrl){loadFromSheets();}
           console.error('[abrirTurno preflight Supabase failed]',err);
         }
       }
-      const res=await _abrirTurnoShifts.apply(this,args);
+      window.__shiftRemoteGuardActive=true;
+      let res=null;
+      try{
+        res=await _abrirTurnoShifts.apply(this,args);
+      }finally{
+        window.__shiftRemoteGuardActive=false;
+      }
       if(turno&&turno.abierto&&hasShiftsSupabaseReady()){
         try{
-          await saveShiftToSupabase(turno);
-          showToast('✓ Turno guardado');
+          const remoteShift=await saveShiftToSupabase(turno);
+          if(!remoteShift?.id) throw new Error('No se confirmó el guardado remoto del turno');
+          renderTurnoPill();
+          showToast('Turno guardado.');
         }catch(err){
           const msg=getShiftSupabaseErrorMessage(err);
+          turno._sync_status='error';
+          turno._sync_error=msg;
+          save();renderTurnoPill();
           setShiftsState('error',msg);
           console.error('[abrirTurno -> saveShiftToSupabase failed]',{turno:{...turno},message:err?.message||String(err),code:err?.code||'',details:err?.details||'',hint:err?.hint||''});
-          showToast('Turno abierto. Se actualizará cuando vuelva la conexión.');
+          showToast('Turno abierto en este dispositivo. Pendiente de sincronizar.');
         }
+      }else if(turno&&turno.abierto){
+        turno._sync_status='pending';
+        turno._sync_error='Sin conexión';
+        save();renderTurnoPill();
+        showToast('Turno abierto en este dispositivo. Pendiente de sincronizar.');
       }
       return res;
     };
@@ -10191,13 +10431,20 @@ if(config.webappUrl){loadFromSheets();}
         shiftCloseLastAt=stampShiftsMoment();
         if(cierreError) shiftCloseLastError=cierreError;
       }
-      const res=await _cerrarTurnoShifts.call(this,money2(chosenTotals.totalEf),money2(chosenTotals.totalMp),money2(chosenTotals.totalTransferencia),money2(chosenTotals.totalOtro),money2(chosenTotals.total),money2(chosenTotals.totalCafeteria),money2(chosenTotals.totalCocina),...args);
+      window.__shiftRemoteGuardActive=true;
+      let res=null;
+      try{
+        res=await _cerrarTurnoShifts.call(this,money2(chosenTotals.totalEf),money2(chosenTotals.totalMp),money2(chosenTotals.totalTransferencia),money2(chosenTotals.totalOtro),money2(chosenTotals.total),money2(chosenTotals.totalCafeteria),money2(chosenTotals.totalCocina),...args);
+      }finally{
+        window.__shiftRemoteGuardActive=false;
+      }
       if(turnoSnapshot && hasShiftsSupabaseReady()){
         try{
-          await closeShiftInSupabase(turnoSnapshot,cierreResumen);
+          const remoteClose=await closeShiftInSupabase(turnoSnapshot,cierreResumen);
+          if(!remoteClose?.id) throw new Error('No se confirmó el cierre remoto del turno');
           shiftCloseSource=cierreSource==='supabase'?'supabase':'local_fallback';
           shiftCloseLastError='';
-          showToast(cierreWarnings.length?'Turno cerrado con advertencias. Revisá el resumen.':'✓ Turno cerrado');
+          showToast(cierreWarnings.length?'Turno cerrado con advertencias. Revisá el resumen.':'Turno cerrado.');
         }catch(err){
           const msg=getShiftSupabaseErrorMessage(err);
           setShiftsState('error',msg);
