@@ -555,23 +555,30 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reserva-reminder-meta{font-size:11px;color:var(--ink3);margin-top:3px}
 
 /* ── RESERVA MODAL OPTIMIZADO ── */
-.reserva-modal-box{max-width:980px!important;padding:0;display:grid;grid-template-rows:auto auto 1fr auto;max-height:min(90vh,760px);overflow:hidden}
+.reserva-modal-box{max-width:1040px!important;padding:0;display:grid;grid-template-rows:auto auto 1fr auto;max-height:min(90vh,760px);overflow:hidden}
 .reserva-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 64px 8px 30px}
 .reserva-modal-head .modal-title{margin:0}
 .reserva-service-row{padding:0 30px 14px;border-bottom:1px solid rgba(32,22,11,.07)}
 .reserva-service-row .tipo-btns{margin-bottom:0;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;max-width:100%}
 .reserva-service-row .tipo-btns::-webkit-scrollbar{display:none}
 .reserva-service-row .tipo-btn{white-space:nowrap;flex-shrink:0}
-.reserva-modal-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.75fr);gap:18px;padding:0 30px 18px;min-height:0}
+.reserva-modal-body{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,.65fr);gap:18px;padding:18px 30px 18px;min-height:0}
 .reserva-main-col,.reserva-side-col{min-height:0;display:flex;flex-direction:column;gap:14px}
 .reserva-form-grid{display:grid;grid-template-columns:1.4fr .85fr .7fr 1fr;gap:10px;align-items:end}
+.mesa-setup-form-grid{grid-template-columns:minmax(240px,420px)}
 .reserva-products-panel{min-height:0;display:flex;flex-direction:column;gap:8px}
 .reserva-products-tools{display:flex;flex-direction:column;gap:8px}
-.reserva-products-scroll{min-height:230px;max-height:360px;overflow-y:auto;padding-right:4px}
+.reserva-products-scroll{min-height:260px;max-height:390px;overflow-y:auto;padding-right:4px}
+.reserva-modal-box .prod-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:0}
+.reserva-modal-box .prod-card{border-radius:var(--r-sm);padding:10px 12px;min-height:78px}
 .reserva-side-col{border-left:1px solid var(--border);padding-left:18px}
 .reserva-summary-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .reserva-summary-title{font-size:13px;font-weight:700;color:var(--ink)}
-.reserva-cart-scroll{min-height:120px;overflow-y:auto;padding-right:4px}
+.reserva-cart-scroll{min-height:70px;max-height:240px;overflow-y:auto;padding-right:4px}
+.reserva-cart-scroll .cart-row{padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
+.reserva-cart-scroll .cart-row:last-child{border-bottom:none}
+.reserva-cart-scroll .qty-btn{width:24px;height:24px;font-size:14px}
+.reserva-cart-scroll .c-sub{min-width:54px}
 .reserva-note textarea{min-height:74px}
 .reserva-total-line{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm)}
 .reserva-total-label{font-size:12px;color:var(--ink2)}
@@ -580,6 +587,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reserva-footer-total{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
 .reserva-footer-total strong{font-size:18px;color:var(--orange)}
 .reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{min-width:150px}
+.mesa-setup-box .reserva-modal-footer{grid-template-columns:1fr auto auto}
 .reserva-reminder-box{text-align:left;max-width:420px}
 .reserva-reminder-title{font-family:var(--ff-serif);font-size:24px;color:var(--ink);margin-bottom:10px}
 .reserva-reminder-text{font-size:14px;color:var(--ink2);line-height:1.5;margin-bottom:10px}
@@ -594,6 +602,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .reserva-side-col{border-left:0;border-top:1px solid var(--border);padding-left:0;padding-top:14px}
   .reserva-cart-scroll{max-height:220px}
   .reserva-modal-footer{grid-template-columns:1fr;position:sticky;bottom:0;padding:12px 18px 16px}
+  .mesa-setup-box .reserva-modal-footer{grid-template-columns:1fr}
   .reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{width:100%;min-width:0}
 }
 @media(max-width:560px){
@@ -1107,26 +1116,50 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 
 <!-- MODAL: NUEVA MESA -->
 <div class="modal-ov" id="modal-nueva-mesa" onclick="closeModalNuevaMesa(event)">
-  <div class="modal-box">
+  <div class="modal-box reserva-modal-box mesa-setup-box">
     <div class="modal-close" onclick="cerrarModalNuevaMesa()">×</div>
-    <div class="modal-head-clean">
+    <div class="reserva-modal-head">
       <div class="modal-title">Nueva mesa</div>
     </div>
-    <div class="service-type-row">
+    <div class="reserva-service-row">
       <div class="tipo-btns">
         <div class="tipo-btn" id="tipo-btn-salon" onclick="selTipo('salon')">🪑 Salón</div>
         <div class="tipo-btn" id="tipo-btn-delivery" onclick="selTipo('delivery')">🛵 Delivery</div>
         <div class="tipo-btn" id="tipo-btn-takeaway" onclick="selTipo('takeaway')">🥡 Take away</div>
       </div>
     </div>
-    <div class="modal-field">
-      <label class="modal-lbl">Nombre / identificación</label>
-      <input class="modal-input" id="nueva-mesa-input" type="text" placeholder="Mesa 3, Juan García…" maxlength="40">
+    <div class="reserva-modal-body">
+      <div class="reserva-main-col">
+        <div class="reserva-form-grid mesa-setup-form-grid">
+          <div class="modal-field">
+            <label class="modal-lbl">Nombre / identificación</label>
+            <input class="modal-input" id="nueva-mesa-input" type="text" placeholder="Mesa 3, Juan García…" maxlength="40">
+          </div>
+        </div>
+        <div class="reserva-products-panel">
+          <label class="modal-lbl">Productos</label>
+          <div class="reserva-products-tools">
+            <input class="inv-search" id="mesa-prod-search" type="search" placeholder="Buscar producto…" oninput="renderMesaSetupProductoGrid()">
+            <div id="mesa-prod-chips" class="cat-chips"></div>
+          </div>
+          <div class="prod-grid reserva-products-scroll" id="mesa-prod-grid"></div>
+        </div>
+      </div>
+      <div class="reserva-side-col">
+        <div class="reserva-summary-head">
+          <div class="reserva-summary-title">Pedido</div>
+        </div>
+        <div id="mesa-carrito-wrap" class="reserva-cart-scroll">
+          <div id="mesa-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:12px 0">Todavía no agregaste productos a la mesa.</div>
+          <div id="mesa-carrito-rows"></div>
+        </div>
+        <div class="modal-field reserva-note">
+          <label class="modal-lbl">Nota</label>
+          <textarea class="modal-textarea" id="mesa-nota" placeholder="Notas del pedido…"></textarea>
+        </div>
+      </div>
     </div>
-    <div class="modal-actions">
-      <button class="btn-cancel" type="button" onclick="cerrarModalNuevaMesa()">Cancelar</button>
-      <button class="btn-save" type="button" onclick="confirmarNuevaMesa()">Abrir mesa</button>
-    </div>
+    <div id="mesa-modal-actions" class="reserva-modal-footer"></div>
   </div>
 </div>
 
@@ -1284,7 +1317,6 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
       <div class="reserva-side-col">
         <div class="reserva-summary-head">
           <div class="reserva-summary-title">Pedido</div>
-          <div class="reserva-total-value" id="res-total">$0</div>
         </div>
         <div id="res-carrito-wrap" class="reserva-cart-scroll">
           <div id="res-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:18px 0">Todavía no agregaste productos a la reserva.</div>
@@ -1293,10 +1325,6 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <div class="modal-field reserva-note">
           <label class="modal-lbl">Nota</label>
           <textarea class="modal-textarea" id="res-nota" placeholder="Canelones veganos, alergia a maní…"></textarea>
-        </div>
-        <div class="reserva-total-line">
-          <span class="reserva-total-label">Total</span>
-          <span class="reserva-total-value" id="res-total-side">$0</span>
         </div>
         <!-- Forma de pago (para cuando se confirma como venta) -->
         <div id="res-pago-wrap" style="display:none">
@@ -1620,6 +1648,7 @@ let dashboardSmartRangeMessage='';
 let prodParaVariantes=null,variantesSeleccionadas={},variantesTarget='pedido';
 let clienteModalRetorno=null,tipoNuevaMesaReserva='salon';
 let reservaPago='ef',reservaCarrito={},catReserva='todos';
+let mesaSetupCarrito={},catMesaSetup='todos';
 let confirmCallback=null,activeMenuTab='cats',ventasFiltroTipo='todos';
 let _variantesEdit=[],pendingCobroCallback=null;
 // Snapshot of reserva modal data when opening cliente modal from it
@@ -2795,18 +2824,125 @@ function renderReservasSection(){
   }).join('');
 }
 
+function renderSetupProductChips(elId,activeCat,setterName,{reservableOnly=false}={}){
+  const el=$(elId);if(!el)return;
+  const sourceCats=reservableOnly?cats.filter(c=>c.reservable):[...cats];
+  const list=[{id:'todos',name:'Todos',color:'#888'},...sourceCats.sort((a,b)=>a.name.localeCompare(b.name,'es'))];
+  el.innerHTML=list.map(c=>`<div class="chip${activeCat===c.id?' active':''}" onclick="${setterName}('${c.id}')">${c.id!=='todos'?`<span class="chip-dot" style="background:${c.color}"></span>`:''}${escapeHtml(c.name)}</div>`).join('');
+}
+function getSetupProductList({searchId,catId,reservableOnly=false}){
+  const allowedCats=reservableOnly?new Set(cats.filter(c=>c.reservable).map(c=>c.id)):null;
+  const base=(menu||[]).filter(p=>p.active!==false&&(!allowedCats||allowedCats.has(p.cat)));
+  const q=($(searchId)?.value||'').trim().toLowerCase();
+  const byCat=catId==='todos'?base:base.filter(p=>p.cat===catId);
+  return byCat.filter(p=>{
+    if(!q)return true;
+    const cat=getCat(p.cat);
+    return String(p.name||'').toLowerCase().includes(q)||String(cat?.name||'').toLowerCase().includes(q);
+  });
+}
+function renderOrderItemRows(cart,{changeFn,removeFn}){
+  return Object.entries(cart||{}).filter(([,v])=>v.qty>0).map(([key,item])=>{
+    const p=findProductById(item.prodId);
+    const name=p?escapeHtml(p.name):escapeHtml(item.prodId);
+    const sub=carritoItemTotal(item);
+    const varsStr=getCartItemVariantsText(item);
+    const safeKey=key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div class="cart-row">
+      <div class="c-name-wrap">
+        <div class="c-name">${name}</div>
+        ${varsStr?`<div class="c-mods">${varsStr}</div>`:''}
+        ${item.nota?`<div class="c-nota">${escapeHtml(item.nota)}</div>`:''}
+      </div>
+      <div class="qty-wrap">
+        <button class="qty-btn" onclick="${changeFn}('${safeKey}',-1)">−</button>
+        <span class="qty-n">${item.qty}</span>
+        <button class="qty-btn" onclick="${changeFn}('${safeKey}',1)">+</button>
+        <button class="qty-btn" onclick="${removeFn}('${safeKey}')" style="color:var(--red);margin-left:2px" title="Eliminar">×</button>
+      </div>
+      <span class="c-sub">${fmt(sub)}</span>
+    </div>`;
+  }).join('');
+}
+
 function abrirNuevaMesa(){
-  tipoNuevaMesa='salon';$('nueva-mesa-input').value='';
+  tipoNuevaMesa='salon';mesaSetupCarrito={};catMesaSetup='todos';
+  $('nueva-mesa-input').value='';$('mesa-nota').value='';
+  const search=$('mesa-prod-search');if(search)search.value='';
   ['salon','delivery','takeaway'].forEach(t=>{$(`tipo-btn-${t}`).className=`tipo-btn${t===tipoNuevaMesa?' sel-'+t:''}`;});
+  renderMesaSetupModalActions();renderMesaSetupProdChips();renderMesaSetupProductoGrid();renderMesaSetupCarrito();
   $('modal-nueva-mesa').classList.add('open');setTimeout(()=>$('nueva-mesa-input').focus(),120);
 }
 function selTipo(t){tipoNuevaMesa=t;['salon','delivery','takeaway'].forEach(x=>{$(`tipo-btn-${x}`).className=`tipo-btn${x===t?' sel-'+x:''}`;});}
-function cerrarModalNuevaMesa(){$('modal-nueva-mesa').classList.remove('open');}
+function cerrarModalNuevaMesa(){$('modal-nueva-mesa').classList.remove('open');mesaSetupCarrito={};catMesaSetup='todos';}
 function closeModalNuevaMesa(e){if(e.target===$('modal-nueva-mesa'))cerrarModalNuevaMesa();}
+function renderMesaSetupModalActions(){
+  const el=$('mesa-modal-actions');if(!el)return;
+  el.innerHTML=`
+    <div class="reserva-footer-total">Total <strong id="mesa-total-footer">${fmt(carritoTotalFn(mesaSetupCarrito))}</strong></div>
+    <button class="btn-cancel" type="button" onclick="cerrarModalNuevaMesa()">Cancelar</button>
+    <button class="btn-save" type="button" onclick="confirmarNuevaMesa()">Abrir mesa</button>`;
+}
+function renderMesaSetupProdChips(){renderSetupProductChips('mesa-prod-chips',catMesaSetup,'setCatMesaSetup');}
+function setCatMesaSetup(id){catMesaSetup=id;renderMesaSetupProdChips();renderMesaSetupProductoGrid();}
+function updateMesaSetupTotals(){
+  const total=fmt(carritoTotalFn(mesaSetupCarrito));
+  const el=$('mesa-total-footer');if(el)el.textContent=total;
+}
+function renderMesaSetupProductoGrid(){
+  const el=$('mesa-prod-grid');if(!el)return;
+  if(catalogIsWaitingForSupabase()){el.innerHTML=renderCatalogLoadingMessage();return;}
+  const list=getSetupProductList({searchId:'mesa-prod-search',catId:catMesaSetup});
+  if(!list.length){el.innerHTML='<div class="empty" style="grid-column:1/-1">Sin productos</div>';updateMesaSetupTotals();return;}
+  el.innerHTML=list.map(p=>{
+    const productId=getProductFrontId(p);
+    const qty=getCartQtyForProduct(mesaSetupCarrito,p),cat=getCat(p.cat),hasVars=(p.variantes||[]).length>0;
+    return `<div class="prod-card${qty>0?' in-cart':''}" data-product-id="${escapeAttr(productId)}">
+      <div class="cat-dot" style="background:${cat.color}"></div>
+      <div class="prod-name">${escapeHtml(p.name)}</div>
+      <div class="prod-price">${fmt(safeProductPrice(p))}</div>
+      ${hasVars?`<div class="prod-mods-hint">🔧 Variantes</div>`:''}
+      ${qty>0?`<div class="prod-badge">${qty}</div>`:''}
+    </div>`;
+  }).join('');
+  attachProductCardHandlers(el,'addItemMesaSetup');
+  updateMesaSetupTotals();
+}
+function addItemMesaSetup(id){
+  const p=findProductById(id);if(!p){logProductDiag('handler mesa setup no encontró producto',{id});showToast('Producto no encontrado');return;}
+  if((p.variantes||[]).length>0){abrirModalVariantes(p,'mesa_setup');return;}
+  const productId=getProductFrontId(p);
+  const key=`${productId}_plain`;
+  mesaSetupCarrito[key]?mesaSetupCarrito[key].qty++:(mesaSetupCarrito[key]={prodId:productId,qty:1,vars:[],nota:'',precio:safeProductPrice(p)});
+  renderMesaSetupProductoGrid();renderMesaSetupCarrito();
+}
+function changeQtyMesaSetup(key,d){
+  if(!mesaSetupCarrito[key])return;
+  mesaSetupCarrito[key].qty+=d;
+  if(mesaSetupCarrito[key].qty<=0)delete mesaSetupCarrito[key];
+  renderMesaSetupProductoGrid();renderMesaSetupCarrito();
+}
+function removeItemMesaSetup(key){
+  delete mesaSetupCarrito[key];
+  renderMesaSetupProductoGrid();renderMesaSetupCarrito();
+}
+function renderMesaSetupCarrito(){
+  const emptyEl=$('mesa-carrito-empty'),rowsEl=$('mesa-carrito-rows');if(!rowsEl)return;
+  const items=Object.entries(mesaSetupCarrito).filter(([,v])=>v.qty>0);
+  if(!items.length){
+    if(emptyEl)emptyEl.style.display='block';
+    rowsEl.innerHTML='';
+    updateMesaSetupTotals();
+    return;
+  }
+  if(emptyEl)emptyEl.style.display='none';
+  rowsEl.innerHTML=renderOrderItemRows(mesaSetupCarrito,{changeFn:'changeQtyMesaSetup',removeFn:'removeItemMesaSetup'});
+  updateMesaSetupTotals();
+}
 async function confirmarNuevaMesa(){
-  const nombre=$('nueva-mesa-input').value.trim();if(!nombre){showToast('Ingresá un nombre');return;}
+  const nombre=$('nueva-mesa-input').value.trim();if(!nombre){showToast('Agregá un nombre o identificación.');return;}
   const localId='m_'+Date.now();
-  const m={id:localId,legacy_local_id:localId,nombre,tipo:tipoNuevaMesa,items:{},pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null,open_order_id:null,status:'open',_syncing:true};
+  const m={id:localId,legacy_local_id:localId,nombre,tipo:tipoNuevaMesa,items:{...mesaSetupCarrito},nota:($('mesa-nota')?.value||'').trim(),pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null,open_order_id:null,status:'open',_syncing:true};
   window.markOpenOrderLocalCreate?.(m.id);
   mesas.push(m);save();syncMesasSheets();cerrarModalNuevaMesa();
   renderMesasSection();
@@ -3340,6 +3476,9 @@ function confirmarVariantes(){
   if(variantesTarget==='reserva'){
     reservaCarrito[key]=item;
     cerrarModalVariantes();renderReservaProductoGrid();renderReservaCarrito();
+  }else if(variantesTarget==='mesa_setup'){
+    mesaSetupCarrito[key]=item;
+    cerrarModalVariantes();renderMesaSetupProductoGrid();renderMesaSetupCarrito();
   }else{
     carrito[key]=item;
     cerrarModalVariantes();saveMesaCarrito();renderProdGrid();renderCart();
@@ -3461,27 +3600,16 @@ function pedirEliminarReserva(id){
   });
 }
 function renderReservaProdChips(){
-  const el=$('res-prod-chips');if(!el)return;
-  const rc=cats.filter(c=>c.reservable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
-  const all=[{id:'todos',name:'Todos',color:'#888'},...rc];
-  el.innerHTML=all.map(c=>`<div class="chip${catReserva===c.id?' active':''}" onclick="setCatReserva('${c.id}')">${c.id!=='todos'?`<span class="chip-dot" style="background:${c.color}"></span>`:''}${c.name}</div>`).join('');
+  renderSetupProductChips('res-prod-chips',catReserva,'setCatReserva',{reservableOnly:true});
 }
 function setCatReserva(id){catReserva=id;renderReservaProdChips();renderReservaProductoGrid();}
 function updateReservaTotals(){
   const total=fmt(carritoTotalFn(reservaCarrito));
-  ['res-total','res-total-side','res-total-footer'].forEach(id=>{const el=$(id);if(el)el.textContent=total;});
+  ['res-total-footer'].forEach(id=>{const el=$(id);if(el)el.textContent=total;});
 }
 function renderReservaProductoGrid(){
   const el=$('res-prod-grid');if(!el)return;
-  const rcIds=cats.filter(c=>c.reservable).map(c=>c.id);
-  const base=(menu||[]).filter(p=>p.active!==false&&rcIds.includes(p.cat));
-  const q=($('res-prod-search')?.value||'').trim().toLowerCase();
-  const byCat=catReserva==='todos'?base:base.filter(p=>p.cat===catReserva);
-  const list=byCat.filter(p=>{
-    if(!q)return true;
-    const cat=getCat(p.cat);
-    return String(p.name||'').toLowerCase().includes(q)||String(cat?.name||'').toLowerCase().includes(q);
-  });
+  const list=getSetupProductList({searchId:'res-prod-search',catId:catReserva,reservableOnly:true});
   if(!list.length){el.innerHTML='<div class="empty" style="grid-column:1/-1">Sin productos</div>';updateReservaTotals();return;}
   el.innerHTML=list.map(p=>{
     const productId=getProductFrontId(p);
@@ -3530,27 +3658,7 @@ function renderReservaCarrito(){
     return;
   }
   if(emptyEl)emptyEl.style.display='none';
-  rowsEl.innerHTML=items.map(([key,item])=>{
-    const p=findProductById(item.prodId);
-    const name=p?escapeHtml(p.name):escapeHtml(item.prodId);
-    const sub=carritoItemTotal(item);
-    const varsStr=getCartItemVariantsText(item);
-    const safeKey=key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `<div class="cart-row">
-      <div class="c-name-wrap">
-        <div class="c-name">${name}</div>
-        ${varsStr?`<div class="c-mods">${varsStr}</div>`:''}
-        ${item.nota?`<div class="c-nota">${escapeHtml(item.nota)}</div>`:''}
-      </div>
-      <div class="qty-wrap">
-        <button class="qty-btn" onclick="changeQtyReserva('${safeKey}',-1)">−</button>
-        <span class="qty-n">${item.qty}</span>
-        <button class="qty-btn" onclick="changeQtyReserva('${safeKey}',1)">+</button>
-        <button class="qty-btn" onclick="removeItemReserva('${safeKey}')" style="color:var(--red);margin-left:2px" title="Eliminar">×</button>
-      </div>
-      <span class="c-sub">${fmt(sub)}</span>
-    </div>`;
-  }).join('');
+  rowsEl.innerHTML=renderOrderItemRows(reservaCarrito,{changeFn:'changeQtyReserva',removeFn:'removeItemReserva'});
   updateReservaTotals();
 }
 function cerrarModalReserva(){$('modal-reserva').classList.remove('open');}
