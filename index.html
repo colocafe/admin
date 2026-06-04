@@ -460,6 +460,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .tipo-btn.sel-salon{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
 .tipo-btn.sel-delivery{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
 .tipo-btn.sel-takeaway{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.modal-head-clean{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-right:40px}
+.modal-head-clean .modal-title{margin-bottom:0}
+.service-type-row{display:flex;justify-content:flex-start;padding-top:14px;margin-bottom:14px}
+.service-type-row .tipo-btns{justify-content:flex-start;margin-bottom:0;overflow-x:auto;scrollbar-width:none;max-width:100%}
+.service-type-row .tipo-btns::-webkit-scrollbar{display:none}
+.service-type-row .tipo-btn{white-space:nowrap;flex-shrink:0}
 
 /* ── TURNO MODAL ── */
 .turno-resumen-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
@@ -549,9 +555,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reserva-reminder-meta{font-size:11px;color:var(--ink3);margin-top:3px}
 
 /* ── RESERVA MODAL OPTIMIZADO ── */
-.reserva-modal-box{max-width:980px!important;padding:0;display:grid;grid-template-rows:auto 1fr auto;max-height:min(90vh,760px);overflow:hidden}
-.reserva-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 30px 12px}
+.reserva-modal-box{max-width:980px!important;padding:0;display:grid;grid-template-rows:auto auto 1fr auto;max-height:min(90vh,760px);overflow:hidden}
+.reserva-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 64px 8px 30px}
 .reserva-modal-head .modal-title{margin:0}
+.reserva-service-row{padding:0 30px 14px;border-bottom:1px solid rgba(32,22,11,.07)}
+.reserva-service-row .tipo-btns{margin-bottom:0;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;max-width:100%}
+.reserva-service-row .tipo-btns::-webkit-scrollbar{display:none}
+.reserva-service-row .tipo-btn{white-space:nowrap;flex-shrink:0}
 .reserva-modal-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.75fr);gap:18px;padding:0 30px 18px;min-height:0}
 .reserva-main-col,.reserva-side-col{min-height:0;display:flex;flex-direction:column;gap:14px}
 .reserva-form-grid{display:grid;grid-template-columns:1.4fr .85fr .7fr 1fr;gap:10px;align-items:end}
@@ -576,8 +586,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reserva-reminder-detail{font-size:13px;color:var(--ink);line-height:1.55;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:14px}
 @media(max-width:900px){
   .reserva-modal-box{max-height:94vh}
-  .reserva-modal-head{padding:18px 18px 10px}
-  .reserva-modal-body{grid-template-columns:1fr;padding:0 18px 14px;overflow-y:auto}
+  .reserva-modal-head{padding:18px 56px 8px 18px}
+  .reserva-service-row{padding:0 18px 12px}
+  .reserva-modal-body{grid-template-columns:1fr;padding:14px 18px 14px;overflow-y:auto}
   .reserva-form-grid{grid-template-columns:1fr 1fr}
   .reserva-products-scroll{max-height:320px}
   .reserva-side-col{border-left:0;border-top:1px solid var(--border);padding-left:0;padding-top:14px}
@@ -587,7 +598,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 @media(max-width:560px){
   .reserva-form-grid{grid-template-columns:1fr}
-  .reserva-modal-head{padding-right:52px}
+  .modal-head-clean{padding-right:34px}
+  .service-type-row{margin-bottom:12px}
   .reserva-products-scroll{min-height:220px}
   .reserva-modal-footer{gap:8px}
 }
@@ -1097,11 +1109,15 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 <div class="modal-ov" id="modal-nueva-mesa" onclick="closeModalNuevaMesa(event)">
   <div class="modal-box">
     <div class="modal-close" onclick="cerrarModalNuevaMesa()">×</div>
-    <div class="modal-title">Nueva mesa</div>
-    <div class="tipo-btns">
-      <div class="tipo-btn" id="tipo-btn-salon" onclick="selTipo('salon')">🪑 Salón</div>
-      <div class="tipo-btn" id="tipo-btn-delivery" onclick="selTipo('delivery')">🛵 Delivery</div>
-      <div class="tipo-btn" id="tipo-btn-takeaway" onclick="selTipo('takeaway')">🥡 Take away</div>
+    <div class="modal-head-clean">
+      <div class="modal-title">Nueva mesa</div>
+    </div>
+    <div class="service-type-row">
+      <div class="tipo-btns">
+        <div class="tipo-btn" id="tipo-btn-salon" onclick="selTipo('salon')">🪑 Salón</div>
+        <div class="tipo-btn" id="tipo-btn-delivery" onclick="selTipo('delivery')">🛵 Delivery</div>
+        <div class="tipo-btn" id="tipo-btn-takeaway" onclick="selTipo('takeaway')">🥡 Take away</div>
+      </div>
     </div>
     <div class="modal-field">
       <label class="modal-lbl">Nombre / identificación</label>
@@ -1223,7 +1239,9 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
     <div class="modal-close" onclick="cerrarModalReserva()">×</div>
     <div class="reserva-modal-head">
       <div class="modal-title" id="reserva-modal-titulo">Reserva</div>
-      <div class="tipo-btns" style="margin-bottom:0">
+    </div>
+    <div class="reserva-service-row">
+      <div class="tipo-btns">
         <div class="tipo-btn" id="rtipo-btn-salon" onclick="selReservaTipo('salon')">🪑 Salón</div>
         <div class="tipo-btn" id="rtipo-btn-delivery" onclick="selReservaTipo('delivery')">🛵 Delivery</div>
         <div class="tipo-btn" id="rtipo-btn-takeaway" onclick="selReservaTipo('takeaway')">🥡 Take away</div>
