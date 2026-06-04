@@ -2278,35 +2278,51 @@ function attachProductCardHandlers(container,handlerName){
     card.addEventListener('click',()=>window[handlerName]?.(card.dataset.productId));
   });
 }
-function dashRango(){const hoy=today();if(dashFiltro==='hoy')return{desde:hoy,hasta:hoy};if(dashFiltro==='semana'){const d=addLocalDays(new Date(),-6);return{desde:getLocalDateString(d),hasta:hoy};}if(dashFiltro==='mes'){const d=new Date();d.setDate(1);return{desde:getLocalDateString(d),hasta:hoy};}return{desde:$('dash-desde')?.value||hoy,hasta:$('dash-hasta')?.value||hoy};}
+function getDashRangeForFilter(filter){
+  const hoy=today();
+  if(filter==='hoy')return{desde:hoy,hasta:hoy};
+  if(filter==='semana'){const d=addLocalDays(new Date(),-6);return{desde:getLocalDateString(d),hasta:hoy};}
+  if(filter==='mes'){const d=new Date();d.setDate(1);return{desde:getLocalDateString(d),hasta:hoy};}
+  return{desde:$('dash-desde')?.value||hoy,hasta:$('dash-hasta')?.value||hoy};
+}
+function updateDashFilterUi(filter){
+  ['hoy','semana','mes','custom'].forEach(x=>$('dfiltro-'+x)?.classList.toggle('active',x===filter));
+  const custom=$('dash-custom-range');if(custom)custom.style.display=filter==='custom'?'flex':'none';
+}
+function applySmartDashboardRange(filter,message=''){
+  dashFiltro=filter;
+  dashboardSmartRangeMessage=message;
+  dashboardInitialRangeResolved=true;
+  updateDashFilterUi(filter);
+}
+function dashRango(){return getDashRangeForFilter(dashFiltro);}
 
 // ── Smart default range — se ejecuta una vez por sesión al abrir el dashboard ──
 function ensureSmartDashboardDefaultRange(){
   if(dashboardInitialRangeResolved||dashboardRangeWasManuallySelected){
     dashboardInitialRangeResolved=true;return;
   }
-  dashboardInitialRangeResolved=true;
+  if(typeof window.hasSalesSupabaseReady==='function'&&window.hasSalesSupabaseReady()){
+    return;
+  }
   const hoy=today();
   function countLocal(desde,hasta){return(ventas||[]).filter(v=>v.fecha>=desde&&v.fecha<=hasta).length;}
   // Si hay ventas hoy: quedarse en 'hoy'
-  if(countLocal(hoy,hoy)>0){dashboardSmartRangeMessage='';return;}
+  if(countLocal(hoy,hoy)>0){dashboardInitialRangeResolved=true;dashboardSmartRangeMessage='';return;}
   // Si hay ventas esta semana: cambiar a 'semana'
   const semDesde=getLocalDateString(addLocalDays(new Date(),-6));
   if(countLocal(semDesde,hoy)>0){
-    dashFiltro='semana';
-    dashboardSmartRangeMessage='Mostrando esta semana — hoy sin actividad';
-    ['hoy','semana','mes','custom'].forEach(x=>$('dfiltro-'+x)?.classList.toggle('active',x==='semana'));
+    applySmartDashboardRange('semana','Mostrando esta semana — hoy sin actividad');
     return;
   }
   // Si hay ventas este mes: cambiar a 'mes'
   const mesDesde=(()=>{const d=new Date();d.setDate(1);return getLocalDateString(d);})();
   if(countLocal(mesDesde,hoy)>0){
-    dashFiltro='mes';
-    dashboardSmartRangeMessage='Mostrando este mes — semana sin actividad';
-    ['hoy','semana','mes','custom'].forEach(x=>$('dfiltro-'+x)?.classList.toggle('active',x==='mes'));
+    applySmartDashboardRange('mes','Mostrando este mes — semana sin actividad');
     return;
   }
   // Sin actividad en ningún período: quedarse en 'hoy'
+  dashboardInitialRangeResolved=true;
   dashboardSmartRangeMessage='';
 }
 
@@ -11123,6 +11139,48 @@ if(config.webappUrl){loadFromSheets();}
       range:{desde,hasta}
     };
   }
+  function dashboardPreviewHasSales(preview){
+    if(!preview)return false;
+    if((preview.sales||[]).length>0)return true;
+    if((preview.comparableRows||[]).length>0)return true;
+    return money2((preview.sales||[]).reduce((sum,sale)=>sum+(Number(sale.total_amount)||0),0))>0;
+  }
+  async function maybeApplyRemoteSmartDashboardRange(appliedRange,preview){
+    if(dashboardRangeWasManuallySelected||dashboardInitialRangeResolved||dashFiltro!=='hoy')return null;
+    const hoy=today();
+    if(appliedRange?.desde!==hoy||appliedRange?.hasta!==hoy){
+      dashboardInitialRangeResolved=true;
+      return null;
+    }
+    if(dashboardPreviewHasSales(preview)){
+      dashboardInitialRangeResolved=true;
+      dashboardSmartRangeMessage='';
+      return null;
+    }
+    const candidates=[
+      {filter:'semana',message:'Mostrando esta semana — hoy sin actividad'},
+      {filter:'mes',message:'Mostrando este mes — semana sin actividad'}
+    ];
+    for(const candidate of candidates){
+      const range=getDashRangeForFilter(candidate.filter);
+      let candidatePreview=null;
+      try{
+        candidatePreview=await Promise.race([
+          loadSalesFromSupabasePreview({...range,limit:false,forceRefresh:true,silent:true}),
+          new Promise(r=>setTimeout(()=>r(null),12000))
+        ]);
+      }catch(err){
+        if(window.canShowClientTechnicalUi?.())console.warn('[Dashboard smart range probe failed]',{filter:candidate.filter,message:err?.message||String(err)});
+      }
+      if(dashboardPreviewHasSales(candidatePreview)){
+        applySmartDashboardRange(candidate.filter,candidate.message);
+        return {range,preview:candidatePreview};
+      }
+    }
+    dashboardInitialRangeResolved=true;
+    dashboardSmartRangeMessage='';
+    return null;
+  }
   let dashboardVisiblePrevPeriodTotal=null;
   let dashboardVisiblePrevPeriodLabel='';
   function setDashboardState({source='pending',rows=[],tickets=[],itemsCount=0,paymentsCount=0,total=0,lastReadAt='',error='',loading=false,range=null,prevPeriodTotal=undefined,prevPeriodLabel=undefined}={}){
@@ -12031,11 +12089,18 @@ if(config.webappUrl){loadFromSheets();}
         salesPreviewLastError=e?.message||String(e);
       }
       if(!preview) throw new Error(salesPreviewLastError||'No se pudo cargar el dashboard');
-      const rows=preview.comparableRows||[];
+      let dashboardRange=appliedRange;
+      let dashboardPreview=preview;
+      const smartRange=await maybeApplyRemoteSmartDashboardRange(appliedRange,preview);
+      if(smartRange){
+        dashboardRange=smartRange.range;
+        dashboardPreview=smartRange.preview;
+      }
+      const rows=dashboardPreview.comparableRows||[];
       const tickets=groupLocalSaleRowsByTicket(rows);
-      const total=money2((preview.sales||[]).reduce((sum,sale)=>sum+(Number(sale.total_amount)||0),0));
+      const total=money2((dashboardPreview.sales||[]).reduce((sum,sale)=>sum+(Number(sale.total_amount)||0),0));
       // Período anterior — best-effort con timeout de 8s
-      const prevRange=getPreviousComparisonRange(dashFiltro,appliedRange.desde,appliedRange.hasta);
+      const prevRange=getPreviousComparisonRange(dashFiltro,dashboardRange.desde,dashboardRange.hasta);
       let prevPeriodTotal=null;
       try{
         const storeId=getSalesStoreId();
@@ -12061,19 +12126,19 @@ if(config.webappUrl){loadFromSheets();}
         source:'supabase',
         rows,
         tickets,
-        itemsCount:preview.items?.length||0,
-        paymentsCount:preview.payments?.length||0,
+        itemsCount:dashboardPreview.items?.length||0,
+        paymentsCount:dashboardPreview.payments?.length||0,
         total,
         lastReadAt:stampSalesMoment(),
-        error:(preview.partialWarnings&&preview.partialWarnings.length)?'No pudimos actualizar el detalle completo. Reintentá.':'',
+        error:(dashboardPreview.partialWarnings&&dashboardPreview.partialWarnings.length)?'No pudimos actualizar el detalle completo. Reintentá.':'',
         loading:false,
-        range:appliedRange,
+        range:dashboardRange,
         prevPeriodTotal,
         prevPeriodLabel:prevRange.label
       });
       if(activeTab==='dashboard') renderDashboard();
       renderSalesSupabaseUi();
-      if(!silent) showToast((preview.partialWarnings&&preview.partialWarnings.length)?'No pudimos actualizar el detalle completo. Reintentá.':'Actualizado.');
+      if(!silent) showToast((dashboardPreview.partialWarnings&&dashboardPreview.partialWarnings.length)?'No pudimos actualizar el detalle completo. Reintentá.':'Actualizado.');
       return window.getDashboardState();
     }catch(err){
       const local=buildLocalDashboardDataset(appliedRange);
