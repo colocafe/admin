@@ -11,7 +11,7 @@
 <link rel="shortcut icon" href="logo.png">
 <link rel="apple-touch-icon" href="logo.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#B94C1E">
+<meta name="theme-color" content="#F27021">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Colo Café">
@@ -27,7 +27,7 @@
 <meta name="twitter:description" content="El sistema con el que Colo Café opera cada día — ventas, turnos, historial y más. Abrí y arrancá.">
 <meta name="twitter:image" content="https://growiapp.github.io/colocafe/preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Sansita:wght@400;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 
@@ -35,35 +35,36 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --bg:#FCF7F1; --surf:#FFFFFF; --surf2:#F6EFE4; --surf3:#EEE2D1;
-  --ink:#20160B; --ink2:#6E5A46; --ink3:#A99680;
-  --orange:#B94C1E; --orange-bg:#FBE8DE; --orange-mid:#DA6D3E;
-  --green:#1B7A4A; --green-bg:#EAF7F0;
-  --red:#B43737; --red-bg:#FDECEC;
-  --amber:#926100; --amber-bg:#FFF4D6;
-  --blue:#235E9D; --blue-bg:#EAF0FA;
-  --border:rgba(28,21,1,.09); --border2:rgba(28,21,1,.16);
-  --shadow-sm:0 8px 22px rgba(74,44,18,.07);
-  --shadow-md:0 16px 40px rgba(74,44,18,.10);
-  --focus:0 0 0 3px rgba(185,76,30,.16);
+  --brand-primary:#F27021; --brand-secondary:#D14400; --brand-coffee:#3E2B23; --brand-cream:#FFF1DC; --brand-accent:#E8A33B;
+  --bg:#FFF1DC; --surf:#FFF8EA; --surf2:#F7E5CD; --surf3:#EFD1AB;
+  --ink:#3E2B23; --ink2:#6B5044; --ink3:#9A806E;
+  --orange:#F27021; --orange-bg:rgba(242,112,33,.14); --orange-mid:#D14400;
+  --green:#1B7A4A; --green-bg:rgba(27,122,74,.11);
+  --red:#B43737; --red-bg:rgba(180,55,55,.10);
+  --amber:#8A5C0B; --amber-bg:rgba(232,163,59,.16);
+  --blue:#235E9D; --blue-bg:rgba(35,94,157,.10);
+  --border:rgba(62,43,35,.14); --border2:rgba(62,43,35,.24);
+  --shadow-sm:0 8px 22px rgba(62,43,35,.07);
+  --shadow-md:0 16px 40px rgba(62,43,35,.12);
+  --focus:0 0 0 3px rgba(242,112,33,.20);
   --r:14px; --r-sm:8px; --r-xs:6px;
-  --ff-serif:'Fraunces',Georgia,serif; --ff:'DM Sans',sans-serif;
+  --ff-display:'Alfa Slab One',Georgia,serif; --ff-serif:'Sansita',Georgia,serif; --ff:'DM Sans',sans-serif; --ff-mono:'DM Mono',ui-monospace,SFMono-Regular,Consolas,monospace;
   --nav-h:60px; --header-h:58px;
   --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px);
 }
 
 /* ── DARK MODE ───────────────────────────────────────────────────────────── */
 [data-theme="dark"]{
-  --bg:#1C1209; --surf:#261710; --surf2:#31200F; --surf3:#3E2A18;
-  --ink:#F2E8D8; --ink2:#C09668; --ink3:#7A6050;
-  --orange:#D4622C; --orange-bg:rgba(180,70,26,.22); --orange-mid:#C8582A;
-  --green:#2EA865; --green-bg:rgba(27,120,70,.18);
-  --red:#C94646; --red-bg:rgba(180,55,55,.18);
-  --amber:#C49422; --amber-bg:rgba(196,148,34,.16);
-  --blue:#4A88C8; --blue-bg:rgba(35,94,157,.22);
-  --border:rgba(240,200,150,.08); --border2:rgba(240,200,150,.15);
+  --bg:#3E2B23; --surf:#4A3329; --surf2:#5A3C2F; --surf3:#6B4635;
+  --ink:#FFF1DC; --ink2:#E8CDB2; --ink3:#B99880;
+  --orange:#F27021; --orange-bg:rgba(242,112,33,.24); --orange-mid:#D14400;
+  --green:#4DB57A; --green-bg:rgba(77,181,122,.16);
+  --red:#E15A4F; --red-bg:rgba(225,90,79,.16);
+  --amber:#E8A33B; --amber-bg:rgba(232,163,59,.18);
+  --blue:#74A5D8; --blue-bg:rgba(116,165,216,.18);
+  --border:rgba(255,241,220,.12); --border2:rgba(255,241,220,.22);
   --shadow-sm:0 8px 22px rgba(0,0,0,.30); --shadow-md:0 16px 40px rgba(0,0,0,.42);
-  --focus:0 0 0 3px rgba(212,98,44,.28);
+  --focus:0 0 0 3px rgba(242,112,33,.30);
 }
 [data-theme="dark"] body{background:
   radial-gradient(circle at top left,rgba(185,76,30,.10),transparent 26%),
@@ -1056,6 +1057,93 @@ button:disabled,.btn-sm:disabled,.btn:disabled,.btn-save:disabled,.btn-cancel:di
   .brand-panel{border-radius:var(--r-sm)}
 }
 
+/* ── COLO CAFE BRAND SYSTEM ── */
+body{
+  background:
+    linear-gradient(180deg,rgba(242,112,33,.055),transparent 220px),
+    radial-gradient(circle at 8% -4%,rgba(232,163,59,.14),transparent 260px),
+    var(--bg);
+}
+[data-theme="dark"] body{
+  background:
+    linear-gradient(180deg,rgba(209,68,0,.18),transparent 260px),
+    radial-gradient(circle at 8% -4%,rgba(242,112,33,.13),transparent 280px),
+    var(--bg);
+}
+.brand-name,.brand-panel-title{font-family:var(--ff-display);font-weight:400;letter-spacing:0;color:var(--ink)}
+.modal-title,.reserva-reminder-title,.chart-ttl,.cart-title,.accordion-titulo,.auth-title,.cfg-title,.reserva-summary-title,.order-summary-title,.turno-stat-val,.seccion-val,.kpi-val,.resultado-val,.hist-total,.mesa-nombre,.reserva-cliente{
+  font-family:var(--ff-serif);font-weight:800;letter-spacing:0
+}
+.modal-lbl,.cfg-lbl,.kpi-lbl,.seccion-lbl,.split-lbl,.sect,.ventas-section-title,.mesas-grupo-titulo,.accordion-meta,.hist-meta,.gasto-meta,.cliente-meta,.sync-help,.header-date,.brand-panel-kicker,.brand-panel-badge,.inv-cat-tag,.sync-badge,.reserva-estado,.mesa-tipo-badge,.op-tag{
+  font-family:var(--ff-mono);letter-spacing:.045em
+}
+.btn-sm,.btn,.btn-cfg,.btn-cancel,.btn-save,.btn-confirmar,.nav-btn,.chip,.dash-filtro-chip,.tipo-btn,.pago-opt,.subtab-btn,.inner-tab-btn{
+  font-family:var(--ff);font-weight:700;letter-spacing:0
+}
+.modal-input,.modal-select,.modal-textarea,.cfg-input,.inv-search,.dash-fecha-input,.pago-mixed-row input,.stock-num,.prod-adm-stock-num{
+  background:rgba(255,248,234,.88)
+}
+[data-theme="dark"] .modal-input,[data-theme="dark"] .modal-select,[data-theme="dark"] .modal-textarea,[data-theme="dark"] .cfg-input,[data-theme="dark"] .inv-search,[data-theme="dark"] .dash-fecha-input,[data-theme="dark"] .pago-mixed-row input,[data-theme="dark"] .stock-num,[data-theme="dark"] .prod-adm-stock-num{
+  background:rgba(90,60,47,.78)
+}
+.header{
+  background:rgba(255,241,220,.90);border-bottom-color:rgba(62,43,35,.16)
+}
+[data-theme="dark"] .header{background:rgba(62,43,35,.92)}
+.bottom-nav,.modal-box,.chart-card,.carrito-wrap,.cfg-card,.accordion-item,.hist-item,.resultado-card,.mesa-card,.reserva-card,.gasto-row,.cliente-row,.prod-card,.auth-card{
+  background:rgba(255,248,234,.94)
+}
+[data-theme="dark"] .bottom-nav,[data-theme="dark"] .modal-box,[data-theme="dark"] .chart-card,[data-theme="dark"] .carrito-wrap,[data-theme="dark"] .cfg-card,[data-theme="dark"] .accordion-item,[data-theme="dark"] .hist-item,[data-theme="dark"] .resultado-card,[data-theme="dark"] .mesa-card,[data-theme="dark"] .reserva-card,[data-theme="dark"] .gasto-row,[data-theme="dark"] .cliente-row,[data-theme="dark"] .prod-card,[data-theme="dark"] .auth-card{
+  background:rgba(74,51,41,.94)
+}
+.brand-panel{
+  background:linear-gradient(135deg,rgba(255,248,234,.96),rgba(247,229,205,.88));border-color:rgba(62,43,35,.16)
+}
+[data-theme="dark"] .brand-panel{background:linear-gradient(135deg,rgba(74,51,41,.95),rgba(62,43,35,.92))}
+.btn-sm.primary,.btn-save,.btn.alt,.btn-cfg,.btn-confirmar,.chip.active,.dash-filtro-chip.active,.pago-opt.active{
+  background:var(--brand-primary);border-color:var(--brand-primary);color:#fff
+}
+.btn-confirmar,.btn-cfg,.btn.alt{background:linear-gradient(180deg,var(--brand-primary),var(--brand-secondary))}
+.btn-save[style*="var(--green)"]{background:var(--green)!important;border-color:var(--green)!important}
+.tipo-btn.sel-salon{background:var(--orange-bg);border-color:var(--brand-primary);color:var(--brand-secondary)}
+.tipo-btn.sel-delivery{background:var(--amber-bg);border-color:var(--brand-accent);color:#6D4300}
+.tipo-btn.sel-takeaway{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.mesa-card.con-items{border-color:var(--brand-primary)}
+.reserva-card.pendiente{border-color:var(--brand-accent)}
+.reserva-card.confirmada{border-color:var(--green)}
+.reserva-card.pagada{border-color:var(--blue)}
+.alert-banner,.setup-banner,.pending-ops-banner{background:var(--amber-bg);border-color:rgba(232,163,59,.34)}
+.app-update-banner{background:rgba(255,241,220,.98);border-color:rgba(242,112,33,.30)}
+.app-update-banner .btn-sm{background:var(--brand-primary);border-color:var(--brand-primary)}
+.prod-badge,.bar-fill.today,.bar-fill.hi,.top-bar-fill,.split-ef{background:var(--brand-primary)}
+.split-mp{background:var(--brand-secondary)}
+.cart-total,.mesa-total,.reserva-total,.reserva-total-value,.reserva-footer-total strong,.cliente-visitas,.nav-btn.active,.subtab-btn.active,.inner-tab-btn.active{
+  color:var(--brand-primary)
+}
+.subtab-btn.active,.inner-tab-btn.active{border-bottom-color:var(--brand-primary)}
+.modal-lbl,.cfg-lbl,.kpi-lbl,.seccion-lbl,.split-lbl,.sect,.ventas-section-title,.mesas-grupo-titulo{
+  color:var(--brand-secondary);font-weight:500
+}
+.kpi-val,.seccion-val,.hist-total,.resultado-val.total{color:var(--brand-coffee)}
+[data-theme="dark"] .kpi-val,[data-theme="dark"] .seccion-val,[data-theme="dark"] .hist-total,[data-theme="dark"] .resultado-val.total{color:var(--ink)}
+.brand-panel-title{font-size:clamp(20px,2.2vw,28px);line-height:.98}
+.brand-name{font-size:22px;line-height:.95}
+.modal-title{font-size:clamp(20px,2vw,26px)}
+.chart-ttl,.accordion-titulo,.cart-title{font-size:15px}
+.kpi-val{font-size:clamp(20px,3vw,28px)}
+.seccion-val{font-size:clamp(20px,3vw,26px)}
+.hist-fecha,.prod-name,.gasto-desc,.cliente-nombre{font-weight:700}
+.top-list,.hist-detail,.gasto-meta,.cliente-meta,.reserva-items,.mesa-items{font-feature-settings:"tnum" 1}
+.toast{background:var(--brand-coffee);color:var(--brand-cream)}
+
+@media(max-width:767px){
+  .brand-name{font-size:20px}
+  .modal-title{font-size:22px}
+  .brand-panel-title{font-size:23px}
+  .chart-ttl,.accordion-titulo,.cart-title{font-size:16px}
+  .kpi-val{font-size:21px}
+}
+
 </style>
 </head>
 <body>
@@ -1899,7 +1987,7 @@ const DEFAULT_MENU=[
   {id:32,name:'Yogurt',           price:5000, cat:'beb',    stock:15, ilimitado:false, variantes:[]},
 ];
 
-const APP_VERSION='2026-06-06-mobile-ops-ux';
+const APP_VERSION='2026-06-06-brand-system-ux';
 const APP_DATA_VERSION='2026-04-30-supabase-v1';
 const APP_DATA_VERSION_KEY='colo_app_data_version';
 const CATALOG_BACKUP_KEY='colo_catalog_backup';
