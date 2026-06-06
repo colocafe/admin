@@ -27,6 +27,7 @@
 <meta name="twitter:description" content="El sistema con el que Colo Café opera cada día — ventas, turnos, historial y más. Abrí y arrancá.">
 <meta name="twitter:image" content="https://growiapp.github.io/colocafe/preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Sansita:wght@400;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -1144,6 +1145,65 @@ body{
   .kpi-val{font-size:21px}
 }
 
+/* ── FINAL RESPONSIVE POLISH ── */
+.header,.bottom-nav,.modal-box,.chart-card,.carrito-wrap,.accordion-item,.hist-item,.mesa-card,.reserva-card,.gasto-row,.cliente-row,.prod-card{will-change:auto}
+.page-wrap>main,.dash-layout,.hist-layout,.adj-layout,.clientes-lista,.carga-layout{width:100%}
+.brand-mark{object-fit:contain}
+.header-left,.header-right,.ventas-header,.hist-hdr,.accordion-hdr,.brand-panel,.top-row,.cart-row{min-width:0}
+.header-right>*{flex-shrink:0}
+.turno-pill{max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-sm,.btn,.btn-cfg,.btn-cancel,.btn-save,.btn-confirmar{white-space:normal;text-align:center}
+.nav-btn{min-width:0}
+.nav-btn .nav-icon{flex-shrink:0}
+.modal-close{z-index:3}
+.modal-actions,.reserva-actions,.mesa-actions,.auth-row,.row{min-width:0}
+.modal-actions>*{min-width:0}
+.prod-grid,.mesas-grid,.kpi-grid,.dash-grid,.seccion-split,.split-stats{min-width:0}
+.prod-card,.mesa-card,.reserva-card,.hist-item,.chart-card{contain:layout paint style}
+.prod-price,.mesa-total,.reserva-total,.cart-total,.hist-total,.gasto-monto,.top-cnt{white-space:nowrap}
+.prod-name,.top-name,.hist-meta,.accordion-meta,.brand-panel-text,.settings-note{min-width:0}
+.empty{border-radius:var(--r-sm);background:rgba(255,248,234,.42);border:1px dashed rgba(62,43,35,.16)}
+[data-theme="dark"] .empty{background:rgba(74,51,41,.36);border-color:rgba(255,241,220,.14)}
+
+@media(min-width:768px) and (max-width:1024px){
+  .header{padding-left:18px;padding-right:18px}
+  .inv-layout,.dash-layout,.hist-layout,.adj-layout{padding:18px}
+  .dash-grid{grid-template-columns:1fr}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .seccion-split{grid-template-columns:repeat(2,1fr)}
+  .mesas-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+  .order-modal-shell,.reserva-modal-box{width:calc(100vw - 28px)}
+  .order-modal-body,.reserva-modal-body{grid-template-columns:minmax(0,1fr) 300px;gap:14px;padding-left:20px;padding-right:20px}
+  .order-modal-header,.reserva-modal-head{padding-left:20px}
+  .order-modal-service,.reserva-service-row{padding-left:20px;padding-right:20px}
+  .order-modal-footer,.reserva-modal-footer{padding-left:20px;padding-right:20px}
+  .bottom-nav{width:min(640px,calc(100vw - 28px))}
+}
+
+@media(min-width:1025px){
+  .modal-box:not(.order-modal-shell):not(.reserva-modal-box){max-width:min(520px,calc(100vw - 48px))}
+  .gasto-modal-box{max-width:500px!important}
+  .reserva-reminder-box{max-width:460px!important}
+}
+
+@media(max-width:420px){
+  .header{gap:6px}
+  .header-right{gap:5px}
+  .turno-pill{max-width:104px;padding-left:8px;padding-right:8px}
+  .ventas-header>div:last-child{gap:6px}
+  .ventas-header .btn-sm{font-size:11px}
+  .prod-card{min-width:0}
+  .pago-mixed-row{grid-template-columns:1fr}
+  .pago-mixed-row input{width:100%}
+  .cart-row{grid-template-columns:1fr}
+  .cart-row .qty-wrap,.cart-row .c-sub{grid-column:auto;grid-row:auto}
+  .cart-row .c-sub{text-align:left}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important}
+}
+
 </style>
 </head>
 <body>
@@ -1987,7 +2047,7 @@ const DEFAULT_MENU=[
   {id:32,name:'Yogurt',           price:5000, cat:'beb',    stock:15, ilimitado:false, variantes:[]},
 ];
 
-const APP_VERSION='2026-06-06-brand-system-ux';
+const APP_VERSION='2026-06-06-responsive-polish';
 const APP_DATA_VERSION='2026-04-30-supabase-v1';
 const APP_DATA_VERSION_KEY='colo_app_data_version';
 const CATALOG_BACKUP_KEY='colo_catalog_backup';
