@@ -933,6 +933,129 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
   .ventas-header>div:last-child{grid-template-columns:1fr}
 }
 
+/* ── UX/UI CONSISTENCY PASS ── */
+html{background:var(--bg);color-scheme:light}
+[data-theme="dark"]{color-scheme:dark}
+body{overflow-x:hidden}
+button,input,select,textarea{font:inherit}
+button:disabled,.btn-sm:disabled,.btn:disabled,.btn-save:disabled,.btn-cancel:disabled,.btn-cfg:disabled,.btn-confirmar:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none}
+
+.btn-sm,.btn,.btn-cfg,.btn-cancel,.btn-save,.btn-confirmar,.pago-opt,.tipo-btn,.chip,.dash-filtro-chip,.subtab-btn,.inner-tab-btn{
+  min-height:38px;border-radius:var(--r-sm);line-height:1.15;text-decoration:none
+}
+.btn-sm,.btn,.btn-cancel,.btn-save,.btn-cfg,.btn-confirmar{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn-sm,.btn,.btn-cancel,.btn-save,.btn-cfg{font-weight:700}
+.btn-sm.primary,.btn-save,.btn.alt,.btn-cfg,.btn-confirmar{box-shadow:0 8px 18px rgba(185,76,30,.14)}
+.btn-sm.primary:hover,.btn-save:hover,.btn.alt:hover,.btn-cfg:hover,.btn-confirmar:hover{filter:saturate(1.04) brightness(.99)}
+.btn-cancel,.btn.ghost,.btn-sm:not(.primary){background:var(--surf);border-color:var(--border2)}
+.btn-cancel:hover,.btn.ghost:hover,.btn-sm:not(.primary):hover{background:var(--surf2)}
+
+.chart-card,.carrito-wrap,.cfg-card,.accordion-item,.hist-item,.resultado-card,.seccion-card,.kpi,.mesa-card,.reserva-card,.gasto-row,.cliente-row,.auth-card,.prod-card,.settings-note,.pending-ops-banner{
+  border-radius:var(--r-sm);border-color:var(--border);box-shadow:var(--shadow-sm)
+}
+.kpi,.seccion-card,.split-stat,.turno-stat{background:rgba(246,239,228,.82);border:1px solid var(--border)}
+[data-theme="dark"] .kpi,[data-theme="dark"] .seccion-card,[data-theme="dark"] .split-stat,[data-theme="dark"] .turno-stat{background:rgba(49,32,15,.86)}
+.chart-card,.hist-item,.mesa-card,.reserva-card,.gasto-row,.cliente-row,.prod-card,.accordion-item{transition:border-color .16s ease,box-shadow .16s ease,background .16s ease,transform .12s ease}
+
+@media(hover:hover) and (pointer:fine){
+  .prod-card:hover,.mesa-card:hover,.reserva-card:hover,.cliente-row:hover,.hist-item:hover,.gasto-row:hover{
+    border-color:rgba(185,76,30,.26);box-shadow:var(--shadow-md);transform:translateY(-1px)
+  }
+  .hist-item:first-child:hover,.gasto-row:hover{transform:none}
+}
+
+.modal-box{max-height:min(90dvh,820px);border-radius:12px}
+.modal-title{line-height:1.15}
+.modal-lbl,.cfg-lbl,.kpi-lbl,.seccion-lbl,.split-lbl{letter-spacing:.055em}
+.modal-input,.modal-select,.modal-textarea,.cfg-input,.inv-search,.dash-fecha-input,.stock-num,.prod-adm-stock-num{
+  border-radius:var(--r-sm);transition:border-color .14s ease,box-shadow .14s ease,background .14s ease
+}
+.modal-input:focus,.modal-select:focus,.modal-textarea:focus,.cfg-input:focus,.inv-search:focus,.dash-fecha-input:focus,.stock-num:focus,.prod-adm-stock-num:focus{
+  box-shadow:var(--focus)
+}
+
+.cat-chips,.dash-filtros,.inner-tab-bar,.inv-toolbar{scrollbar-width:none}
+.cat-chips::-webkit-scrollbar,.dash-filtros::-webkit-scrollbar,.inner-tab-bar::-webkit-scrollbar,.inv-toolbar::-webkit-scrollbar{display:none}
+.chip,.dash-filtro-chip,.tipo-btn,.pago-opt,.subtab-btn,.inner-tab-btn{touch-action:manipulation}
+.chip.active,.dash-filtro-chip.active,.pago-opt.active{box-shadow:0 7px 16px rgba(185,76,30,.12)}
+
+.ventas-header{background:rgba(255,255,255,.72);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;box-shadow:var(--shadow-sm)}
+[data-theme="dark"] .ventas-header{background:rgba(38,23,16,.72)}
+.ventas-section-title{margin-top:18px}
+.mesa-card{min-height:136px}
+.mesa-tipo-badge,.reserva-estado,.sync-badge,.op-tag,.inv-cat-tag,.auth-store-chip{border-radius:999px}
+.mesa-total,.reserva-total,.cart-total,.reserva-footer-total strong{font-variant-numeric:tabular-nums}
+.reserva-mainline,.cart-hdr,.order-summary-header,.reserva-summary-head{min-width:0}
+.reserva-cliente,.mesa-nombre,.top-name,.c-name,.gasto-desc,.cliente-nombre{overflow-wrap:anywhere}
+.reserva-actions,.mesa-actions{align-items:stretch}
+
+.hist-hdr{gap:12px}
+.hist-hdr>div:first-child{min-width:0}
+.hist-meta{line-height:1.38}
+.hist-right{min-width:max-content}
+.hist-detail{background:rgba(246,239,228,.35)}
+[data-theme="dark"] .hist-detail{background:rgba(49,32,15,.36)}
+.hist-row2{gap:14px}
+.hist-row2 span:first-child{min-width:0;overflow-wrap:anywhere}
+.hist-row2 span:last-child{text-align:right}
+
+.kpi-grid{gap:10px}
+.kpi-val{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.dash-filtros{align-items:center}
+.bar-chart{min-height:96px}
+.top-cnt,.split-monto,.bar-monto{font-variant-numeric:tabular-nums}
+.top-row{min-width:0}
+
+.accordion-hdr{gap:12px}
+.accordion-hdr>div:first-child{min-width:0}
+.accordion-meta{line-height:1.35}
+.accordion-body{background:rgba(255,255,255,.34)}
+[data-theme="dark"] .accordion-body{background:rgba(0,0,0,.08)}
+.row{align-items:center}
+
+@media(min-width:768px){
+  .bottom-nav{
+    left:50%;right:auto;bottom:14px;width:min(680px,calc(100vw - 32px));min-height:58px;
+    transform:translateX(-50%);border:1px solid var(--border);border-radius:16px;
+    padding:0;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);
+    box-shadow:0 16px 42px rgba(32,22,11,.14);overflow:hidden
+  }
+  [data-theme="dark"] .bottom-nav{background:rgba(38,23,16,.92)}
+  .nav-btn{min-height:58px;font-size:11px}
+  .page-wrap{padding-bottom:calc(var(--nav-h) + 42px)}
+  .page-footer{padding-bottom:calc(var(--nav-h) + 42px)}
+  .app-update-banner{left:50%;right:auto;width:min(560px,calc(100vw - 32px));transform:translateX(-50%);bottom:86px}
+  .modal-ov{padding:24px}
+  .modal-box{max-height:min(88dvh,820px)}
+  .order-modal-shell{height:min(88dvh,780px);max-height:min(88dvh,780px)}
+  .reserva-modal-box{max-height:min(88dvh,780px)}
+  .ventas-header{position:sticky;top:calc(var(--header-h) + 8px);z-index:80}
+  .hist-layout,.dash-layout,.adj-layout,.carga-layout{padding-bottom:28px}
+  .mesas-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  .prod-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .hist-hdr{padding:14px 16px}
+  .chart-card{padding:18px}
+  .kpi{padding:14px 16px}
+}
+
+@media(max-width:767px){
+  .btn-sm,.btn,.btn-cfg,.btn-cancel,.btn-save,.btn-confirmar,.pago-opt,.tipo-btn,.chip,.dash-filtro-chip,.subtab-btn,.inner-tab-btn{min-height:44px}
+  .ventas-header{padding:10px}
+  .modal-box{border-radius:14px 14px 8px 8px}
+  .bottom-nav{background:rgba(255,255,255,.96);backdrop-filter:blur(14px)}
+  [data-theme="dark"] .bottom-nav{background:rgba(38,23,16,.96)}
+  .nav-btn.active{background:rgba(185,76,30,.08)}
+  .chart-card,.accordion-item,.hist-item,.mesa-card,.reserva-card,.gasto-row,.cliente-row,.prod-card,.carrito-wrap{box-shadow:0 6px 18px rgba(74,44,18,.06)}
+  .hist-hdr{padding:12px}
+  .hist-detail{padding:10px 12px}
+  .split-stat{text-align:left}
+  .split-pct{font-size:17px}
+  .modal-field{margin-bottom:12px}
+  .gasto-row{align-items:flex-start}
+  .gasto-monto{padding-top:2px}
+  .brand-panel{border-radius:var(--r-sm)}
+}
+
 </style>
 </head>
 <body>
