@@ -1204,6 +1204,185 @@ body{
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important}
 }
 
+/* ── ORDER ENTRY MODALS: MESA + RESERVA ── */
+.order-modal-shell,.reserva-modal-box{
+  width:min(1280px,calc(100vw - 28px))!important;
+  max-width:min(1280px,calc(100vw - 28px))!important;
+  height:min(92dvh,860px);
+  max-height:calc(100dvh - 28px);
+  grid-template-rows:auto auto minmax(0,1fr) auto;
+}
+.order-modal-header,.reserva-modal-head{
+  min-height:56px;padding:18px 64px 10px 24px;border-bottom:1px solid rgba(62,43,35,.08)
+}
+.order-modal-header .modal-title,.reserva-modal-head .modal-title{font-size:clamp(24px,2.4vw,34px)}
+.order-modal-service,.reserva-service-row{
+  padding:10px 24px 12px;background:rgba(247,229,205,.38);border-bottom:1px solid var(--border)
+}
+[data-theme="dark"] .order-modal-service,[data-theme="dark"] .reserva-service-row{background:rgba(62,43,35,.34)}
+.order-modal-service .tipo-btns,.reserva-service-row .tipo-btns{gap:8px}
+.order-modal-service .tipo-btn,.reserva-service-row .tipo-btn{min-height:40px;padding:9px 16px}
+
+.order-modal-body,.reserva-modal-body{
+  grid-template-columns:minmax(620px,1fr) minmax(330px,380px);
+  gap:18px;padding:18px 24px;overflow:hidden
+}
+.order-modal-main,.reserva-main-col{min-width:0;gap:12px}
+.order-modal-side,.reserva-side-col{
+  min-width:0;border-left:0;padding-left:0;overflow:hidden
+}
+.order-fields,.reserva-form-grid{
+  background:rgba(255,248,234,.68);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px
+}
+[data-theme="dark"] .order-fields,[data-theme="dark"] .reserva-form-grid{background:rgba(74,51,41,.48)}
+.mesa-setup-form-grid{max-width:none}
+.reserva-form-grid{grid-template-columns:minmax(220px,1.4fr) minmax(140px,.7fr) minmax(120px,.55fr) minmax(170px,.85fr)}
+.order-fields .modal-field,.reserva-form-grid .modal-field{margin-bottom:0}
+
+.order-product-picker,.reserva-products-panel{
+  min-height:0;flex:1;background:rgba(255,248,234,.72);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:12px;gap:10px;overflow:hidden
+}
+[data-theme="dark"] .order-product-picker,[data-theme="dark"] .reserva-products-panel{background:rgba(74,51,41,.52)}
+.order-product-picker>.modal-lbl,.reserva-products-panel>.modal-lbl{
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:0
+}
+.order-product-tools,.reserva-products-tools{
+  position:sticky;top:0;z-index:2;background:inherit;border-bottom:1px solid var(--border);
+  margin:0 -12px;padding:0 12px 10px
+}
+.order-product-tools .inv-search,.reserva-products-tools .inv-search{
+  min-height:46px;font-size:15px;background:rgba(255,241,220,.95);border-width:1.5px
+}
+[data-theme="dark"] .order-product-tools .inv-search,[data-theme="dark"] .reserva-products-tools .inv-search{background:rgba(90,60,47,.92)}
+.order-product-tools .cat-chips,.reserva-products-tools .cat-chips{margin-bottom:0;padding-bottom:2px}
+.order-product-tools .chip,.reserva-products-tools .chip{min-height:36px;padding:8px 12px}
+.order-product-grid-scroll,.reserva-products-scroll{
+  flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;
+  padding:0 2px 10px 0;scrollbar-gutter:stable
+}
+.order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{
+  grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;align-content:start
+}
+.order-modal-shell .prod-card,.reserva-modal-box .prod-card{
+  min-height:68px;padding:9px 10px;border-width:1.25px;display:flex;flex-direction:column;justify-content:flex-start
+}
+.order-modal-shell .prod-card:not(.in-cart)::after,.reserva-modal-box .prod-card:not(.in-cart)::after{
+  content:'+';position:absolute;right:8px;bottom:8px;width:20px;height:20px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;background:var(--brand-primary);color:#fff;
+  font:700 14px/1 var(--ff);opacity:.92
+}
+.order-modal-shell .prod-card.in-cart,.reserva-modal-box .prod-card.in-cart{
+  background:rgba(242,112,33,.10);border-color:var(--brand-primary)
+}
+.order-modal-shell .prod-card .cat-dot,.reserva-modal-box .prod-card .cat-dot{margin-bottom:6px}
+.order-modal-shell .prod-name,.reserva-modal-box .prod-name{font-size:12.5px;line-height:1.18}
+.order-modal-shell .prod-price,.reserva-modal-box .prod-price{font-size:12px;margin-top:auto}
+
+.order-modal-side,.reserva-side-col{
+  background:rgba(247,229,205,.52);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:12px
+}
+[data-theme="dark"] .order-modal-side,[data-theme="dark"] .reserva-side-col{background:rgba(62,43,35,.44)}
+.order-summary{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px;min-height:0}
+.order-summary-header,.reserva-summary-head{
+  min-height:38px;padding-bottom:8px;border-bottom:1px solid var(--border)
+}
+.order-summary-title,.reserva-summary-title{font-size:16px}
+.order-items-scroll,.reserva-cart-scroll{
+  min-height:120px;max-height:none;overflow:auto;overscroll-behavior:contain;padding-right:4px
+}
+.order-items-scroll .cart-row,.reserva-cart-scroll .cart-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;padding:10px 0
+}
+.order-items-scroll .qty-wrap,.reserva-cart-scroll .qty-wrap{grid-column:1;grid-row:2}
+.order-items-scroll .c-sub,.reserva-cart-scroll .c-sub{grid-column:2;grid-row:1/3;align-self:center}
+.order-note,.reserva-note{margin-bottom:0}
+.order-note textarea,.reserva-note textarea{min-height:66px;max-height:100px}
+
+.order-modal-footer,.reserva-modal-footer{
+  min-height:68px;padding:12px 24px calc(12px + var(--safe-bottom));background:rgba(255,241,220,.96);
+  border-top:1px solid var(--border);box-shadow:0 -10px 24px rgba(62,43,35,.08)
+}
+[data-theme="dark"] .order-modal-footer,[data-theme="dark"] .reserva-modal-footer{background:rgba(62,43,35,.96)}
+.order-modal-footer .reserva-footer-total,.reserva-modal-footer .reserva-footer-total{
+  max-width:260px;min-height:44px
+}
+.order-modal-footer .btn-cancel,.order-modal-footer .btn-save,.reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{
+  min-height:44px
+}
+
+@media(min-width:1180px){
+  .order-modal-body,.reserva-modal-body{grid-template-columns:minmax(760px,1fr) 380px}
+  .order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{grid-template-columns:repeat(auto-fill,minmax(138px,1fr))}
+}
+
+@media(min-width:768px) and (max-width:1024px){
+  .order-modal-shell,.reserva-modal-box{
+    width:calc(100vw - 20px)!important;max-width:calc(100vw - 20px)!important;height:calc(100dvh - 20px);max-height:calc(100dvh - 20px)
+  }
+  .order-modal-body,.reserva-modal-body{
+    grid-template-columns:minmax(0,1fr) 320px;padding:14px;gap:12px
+  }
+  .order-modal-header,.reserva-modal-head{padding-left:18px}
+  .order-modal-service,.reserva-service-row{padding-left:18px;padding-right:18px}
+  .order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{grid-template-columns:repeat(auto-fill,minmax(122px,1fr))}
+  .order-modal-shell .prod-card,.reserva-modal-box .prod-card{min-height:66px}
+  .reserva-form-grid{grid-template-columns:1fr 1fr}
+}
+
+@media(max-width:767px){
+  #modal-nueva-mesa,#modal-reserva,.modal-ov:has(.order-modal-shell){align-items:stretch;padding:0}
+  .order-modal-shell,.reserva-modal-box{
+    width:100vw!important;max-width:100vw!important;height:100dvh;max-height:100dvh;border-radius:0!important;
+    grid-template-rows:auto auto minmax(0,1fr) auto
+  }
+  .order-modal-header,.reserva-modal-head{
+    min-height:58px;padding:calc(12px + var(--safe-top)) 56px 10px 14px;background:rgba(255,241,220,.98)
+  }
+  [data-theme="dark"] .order-modal-header,[data-theme="dark"] .reserva-modal-head{background:rgba(62,43,35,.98)}
+  .order-modal-header .modal-title,.reserva-modal-head .modal-title{font-size:24px;line-height:1}
+  .order-modal-service,.reserva-service-row{
+    padding:8px 12px 10px;overflow-x:auto
+  }
+  .order-modal-body,.reserva-modal-body{
+    display:flex;flex-direction:column;gap:12px;padding:12px;overflow:auto;overscroll-behavior:contain
+  }
+  .order-fields,.reserva-form-grid{padding:10px;gap:8px}
+  .order-product-picker,.reserva-products-panel{
+    flex:0 0 auto;min-height:auto;overflow:visible;padding:10px
+  }
+  .order-product-tools,.reserva-products-tools{
+    position:static;margin:0 -10px;padding:0 10px 8px
+  }
+  .order-product-grid-scroll,.reserva-products-scroll{
+    overflow:visible;padding:0
+  }
+  .order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));gap:8px
+  }
+  .order-modal-shell .prod-card,.reserva-modal-box .prod-card{
+    min-height:72px;padding:10px
+  }
+  .order-modal-side,.reserva-side-col{
+    flex:0 0 auto;padding:10px;border-top:0
+  }
+  .order-items-scroll,.reserva-cart-scroll{min-height:auto;max-height:none;overflow:visible}
+  .order-note textarea,.reserva-note textarea{min-height:58px}
+  .order-modal-footer,.reserva-modal-footer{
+    position:sticky;bottom:0;z-index:4;grid-template-columns:1fr!important;gap:8px;
+    padding:10px 12px calc(10px + var(--safe-bottom))
+  }
+  .order-modal-footer .reserva-footer-total,.reserva-modal-footer .reserva-footer-total{
+    max-width:none;width:100%
+  }
+  .order-modal-footer .btn-cancel,.order-modal-footer .btn-save,.reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{width:100%}
+}
+
+@media(max-width:380px){
+  .order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{grid-template-columns:1fr}
+}
+
 </style>
 </head>
 <body>
@@ -2047,7 +2226,7 @@ const DEFAULT_MENU=[
   {id:32,name:'Yogurt',           price:5000, cat:'beb',    stock:15, ilimitado:false, variantes:[]},
 ];
 
-const APP_VERSION='2026-06-06-responsive-polish';
+const APP_VERSION='2026-06-06-order-modal-ux';
 const APP_DATA_VERSION='2026-04-30-supabase-v1';
 const APP_DATA_VERSION_KEY='colo_app_data_version';
 const CATALOG_BACKUP_KEY='colo_catalog_backup';
