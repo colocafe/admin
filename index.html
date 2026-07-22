@@ -2437,7 +2437,7 @@ const DEFAULT_MENU=[
   {id:32,name:'Yogurt',           price:5000, cat:'beb',    stock:15, ilimitado:false, variantes:[]},
 ];
 
-const APP_VERSION='2026-07-22-persistence-audit';
+const APP_VERSION='2026-07-22-sale-child-read-fix';
 const APP_DATA_VERSION='2026-04-30-supabase-v1';
 const APP_DATA_VERSION_KEY='colo_app_data_version';
 const CATALOG_BACKUP_KEY='colo_catalog_backup';
@@ -12732,8 +12732,10 @@ if(config.webappUrl){loadFromSheets();}
         comparison:null
       };
       renderSalesSupabaseUi();
-      // toast silenciado — carga automática de ventas en segundo plano
-      if(partialWarnings.length && !opts.silent) showToast('No pudimos actualizar el detalle completo. Reintentá.');
+      // Es un refresh auxiliar: mantener el detalle técnico sin interrumpir al operador.
+      if(partialWarnings.length && !opts.silent && window.canShowClientTechnicalUi?.()){
+        showToast('No pudimos actualizar el detalle completo. Reintentá.');
+      }
       return salesPreviewResult;
     }catch(err){
       salesPreviewLastError=err?.message||String(err);
@@ -12748,29 +12750,38 @@ if(config.webappUrl){loadFromSheets();}
       return null;
     }
   };
-  window.loadSaleItemsFromSupabasePreview=async function(saleIds){
-    if(!Array.isArray(saleIds)||!saleIds.length) return [];
+  const SALE_CHILD_READ_BATCH_SIZE=100;
+  async function loadSaleChildRowsInBatches(table,columns,saleIds){
+    const ids=Array.from(new Set((Array.isArray(saleIds)?saleIds:[]).map(id=>String(id||'')).filter(Boolean)));
+    if(!ids.length)return[];
     const client=getSalesSupabaseClient();
     const storeId=getSalesStoreId();
-    const {data,error}=await client
-      .from('sale_items')
-      .select('id,store_id,sale_id,legacy_id,product_id,product_name,category_name,section,variant_summary,note,quantity,unit_price,variants_price,line_total,metadata')
-      .eq('store_id',storeId)
-      .in('sale_id',saleIds);
-    if(error) throw error;
-    return data||[];
+    const rows=[];
+    for(let i=0;i<ids.length;i+=SALE_CHILD_READ_BATCH_SIZE){
+      const batch=ids.slice(i,i+SALE_CHILD_READ_BATCH_SIZE);
+      const {data,error}=await client
+        .from(table)
+        .select(columns)
+        .eq('store_id',storeId)
+        .in('sale_id',batch);
+      if(error)throw error;
+      rows.push(...(data||[]));
+    }
+    return rows;
+  }
+  window.loadSaleItemsFromSupabasePreview=async function(saleIds){
+    return loadSaleChildRowsInBatches(
+      'sale_items',
+      'id,store_id,sale_id,legacy_id,product_id,product_name,category_name,section,variant_summary,note,quantity,unit_price,variants_price,line_total,metadata',
+      saleIds
+    );
   };
   window.loadSalePaymentsFromSupabasePreview=async function(saleIds){
-    if(!Array.isArray(saleIds)||!saleIds.length) return [];
-    const client=getSalesSupabaseClient();
-    const storeId=getSalesStoreId();
-    const {data,error}=await client
-      .from('sale_payments')
-      .select('id,store_id,sale_id,legacy_id,method,amount,business_date,paid_at,metadata')
-      .eq('store_id',storeId)
-      .in('sale_id',saleIds);
-    if(error) throw error;
-    return data||[];
+    return loadSaleChildRowsInBatches(
+      'sale_payments',
+      'id,store_id,sale_id,legacy_id,method,amount,business_date,paid_at,metadata',
+      saleIds
+    );
   };
   window.mapSupabaseSaleToComparableLocalRows=function(sale,items,payments){
     const paymentMode=sale?.payment_mode||((payments||[]).length>1?'mixed':'single');
@@ -13003,7 +13014,11 @@ if(config.webappUrl){loadFromSheets();}
       });
       if(activeTab==='historial') renderHistVentas();
       renderSalesSupabaseUi();
-      if(!silent) showToast((preview.warnings&&preview.warnings.length)?'No pudimos actualizar el detalle completo. Reintentá.':'Actualizado.');
+      if(!silent){
+        if(preview.warnings&&preview.warnings.length){
+          if(window.canShowClientTechnicalUi?.())showToast('No pudimos actualizar el detalle completo. Reintentá.');
+        }else showToast('Actualizado.');
+      }
       return preview;
     }catch(err){
       const localTickets=getLocalHistoryTickets();
@@ -13143,7 +13158,11 @@ if(config.webappUrl){loadFromSheets();}
       });
       if(activeTab==='dashboard') renderDashboard();
       renderSalesSupabaseUi();
-      if(!silent) showToast((dashboardPreview.partialWarnings&&dashboardPreview.partialWarnings.length)?'No pudimos actualizar el detalle completo. Reintentá.':'Actualizado.');
+      if(!silent){
+        if(dashboardPreview.partialWarnings&&dashboardPreview.partialWarnings.length){
+          if(window.canShowClientTechnicalUi?.())showToast('No pudimos actualizar el detalle completo. Reintentá.');
+        }else showToast('Actualizado.');
+      }
       return window.getDashboardState();
     }catch(err){
       let fallbackRange=appliedRange;
