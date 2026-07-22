@@ -2437,7 +2437,7 @@ const DEFAULT_MENU=[
   {id:32,name:'Yogurt',           price:5000, cat:'beb',    stock:15, ilimitado:false, variantes:[]},
 ];
 
-const APP_VERSION='2026-07-22-sale-child-read-fix';
+const APP_VERSION='2026-07-22-mesa-open-flow-fix';
 const APP_DATA_VERSION='2026-04-30-supabase-v1';
 const APP_DATA_VERSION_KEY='colo_app_data_version';
 const CATALOG_BACKUP_KEY='colo_catalog_backup';
@@ -3856,18 +3856,21 @@ function renderCajaPendingBanner(){
   el.innerHTML=`<div class="pending-ops-text">${pendingText}${clockText}</div>${count?`<button class="btn-sm" type="button" onclick="retryCajaPendingOperations()">Reintentar</button>`:''}`;
 }
 async function retryCajaPendingOperations(){
+  const openOrdersTask=window.retryPendingOpenOrderWrites?.({reason:'manual'});
   const tasks=[
     window.retryPendingSalesSync?.(),
     window.syncLocalExpensesToSupabase?.(),
     window.syncLocalReservationsToSupabase?.(),
-    window.retryPendingOpenOrdersSync?.({silent:true}),
+    openOrdersTask,
     window.retryPendingOpenOrderClosures?.({silent:true}),
-    window.retryPendingOpenOrderItemSyncs?.({silent:true}),
     window.retryPendingShiftClosures?.({silent:true}),
     (turno&&turno.abierto&&(!turno._sb_id||turno._sync_status==='pending'||turno._sync_status==='error'))?window.syncLocalShiftToSupabase?.():null
   ].filter(Boolean);
   if(!tasks.length){showToast('No hay operaciones pendientes.');renderCajaPendingBanner();return;}
-  const results=await Promise.allSettled(tasks);
+  const results=await Promise.allSettled(tasks.map(task=>Promise.resolve(task).finally(()=>{
+    renderCajaPendingBanner();
+    renderMesasSection();
+  })));
   const failed=results.filter(r=>r.status==='rejected'||r.value?.ok===false||Number(r.value?.failed||0)>0).length;
   renderCajaPendingBanner();renderMesasSection();renderReservasSection();renderGastos();
   showToast(failed?'Reintento finalizado con avisos.':'Actualizado.');
@@ -4106,21 +4109,38 @@ async function confirmarNuevaMesa(){
   const localId='m_'+Date.now();
   const m={id:localId,legacy_local_id:localId,nombre,tipo:tipoNuevaMesa,items:{...mesaSetupCarrito},nota:($('mesa-nota')?.value||'').trim(),pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null,open_order_id:null,status:'open',_syncing:true};
   window.markOpenOrderLocalCreate?.(m.id);
-  mesas.push(m);save();syncMesasSheets();cerrarModalNuevaMesa();
-  renderMesasSection();
-  const synced=await window.syncMesaToSupabase?.(m).catch(()=>false);
-  m._syncing=!synced;
-  save();
-  if(synced===false){
-    m._sync_status=m._sync_status==='partial_error'?'partial_error':'error';
-    m._sync_error=m._sync_error||'No se confirmó el guardado remoto de la mesa';
+  const mesasBeforeCreate=[...(mesas||[])];
+  try{
+    mesas.push(m);
     save();
-    renderMesasSection();
+  }catch(err){
+    mesas=mesasBeforeCreate;
+    if(window.canShowClientTechnicalUi?.())console.error('[Caja] local open order create failed',err);
+    showToast('No pudimos abrir la mesa. Reintentá.');
+    return;
+  }
+  syncMesasSheets();cerrarModalNuevaMesa();
+  renderVentas();
+  const synced=await window.syncMesaToSupabase?.(m).catch(()=>false);
+  const savedMesa=findMesaByAnyId(m._sb_id||m.id||m.legacy_local_id)||m;
+  savedMesa._syncing=!synced;
+  if(synced){
+    savedMesa._sync_status='confirmed';
+    savedMesa._sync_error='';
+  }else if(savedMesa._sync_status!=='partial_error'){
+    savedMesa._sync_status=navigator.onLine===false||!window.getOpenOrdersSyncState?.()?.ready?'pending':'error';
+    savedMesa._sync_error=savedMesa._sync_error||savedMesa._lastSyncError||'No se confirmó el guardado remoto de la mesa';
+  }
+  save();
+  renderMesasSection();
+  renderCajaPendingBanner();
+  if(synced){
+    showToast('Mesa abierta.');
+  }else{
     showToast('Mesa guardada en este dispositivo. Pendiente de sincronizar.');
   }
   // Post-creación: forzar refresh rápido para sincronizar con otros dispositivos
   setTimeout(()=>window.triggerOORefresh?.('post_action'),700);
-  abrirMesa(m.id);
 }
 document.addEventListener('DOMContentLoaded',()=>{
   const el=$('nueva-mesa-input');if(el)el.addEventListener('keydown',e=>{if(e.key==='Enter')confirmarNuevaMesa();});
@@ -6142,9 +6162,8 @@ if(config.webappUrl){loadFromSheets();}
       window.retryPendingSalesSync?.(),
       window.syncLocalExpensesToSupabase?.(),
       window.syncLocalReservationsToSupabase?.(),
-      window.retryPendingOpenOrdersSync?.({silent:true}),
+      window.retryPendingOpenOrderWrites?.({reason:'technical_manual'}),
       window.retryPendingOpenOrderClosures?.({silent:true}),
-      window.retryPendingOpenOrderItemSyncs?.({silent:true}),
       window.retryPendingShiftClosures?.({silent:true}),
       (turno&&turno.abierto&&(!turno._sb_id||turno._sync_status==='pending'||turno._sync_status==='error'))?window.syncLocalShiftToSupabase?.():null
     ].filter(Boolean);
@@ -6272,11 +6291,13 @@ if(config.webappUrl){loadFromSheets();}
     (window.findPendingSalesSyncGroups?.(ventas||[])||[]).forEach(group=>{
       ops.push({type:'venta',operation:'save_sale',status:getGroupSyncMeta?.(group)?.status||'pending',label:getStableSaleLegacyId?.(group)||'Venta pendiente',idempotency_key:getStableSaleLegacyId?.(group)||'',attempts:Math.max(...(group.rows||[]).map(r=>Number(r._sb_retry_count)||0),0),last_error:(group.rows||[]).map(r=>r._sb_sync_error).filter(Boolean).join(' | '),payload:{rows:(group.rows||[]).length,total:money2(group.total)}});
     });
+    const pendingMesaKeys=new Set();
     (mesas||[]).filter(m=>m&&((!m._sb_id)||m._syncing||m._sync_status==='partial_error')).forEach(m=>{
+      [m.id,m._sb_id,m.open_order_id,m.legacy_local_id].map(v=>String(v||'')).filter(Boolean).forEach(key=>pendingMesaKeys.add(key));
       ops.push({type:'mesa',operation:m._sb_id?'sync_open_order_items':'create_open_order',status:m._sync_status||'pending',label:m.nombre||'Mesa',idempotency_key:`open_order:${m.legacy_local_id||m.id}`,attempts:0,last_error:m._sync_error||m._lastSyncError||'',payload:{id:m.id,_sb_id:m._sb_id,items:Object.keys(m.items||{}).length}});
     });
     (pendingOpenOrderClosures||[]).filter(x=>x&&x.status!=='synced').forEach(x=>ops.push({type:'mesa',operation:'close_open_order',status:x.status||'pending',label:x.mesa_snapshot?.nombre||x.open_order_id,idempotency_key:x.idempotency_key||'',attempts:x.attempts||0,last_error:x.last_error||'',payload:x}));
-    (pendingOpenOrderItemSyncs||[]).filter(x=>x&&x.status!=='synced').forEach(x=>ops.push({type:'mesa',operation:'replace_open_order_items',status:x.status||'pending',label:x.open_order_id,idempotency_key:x.idempotency_key||'',attempts:x.attempts||0,last_error:x.last_error||'',payload:{open_order_id:x.open_order_id,rows:(x.payload||[]).length}}));
+    (pendingOpenOrderItemSyncs||[]).filter(x=>x&&x.status!=='synced'&&!pendingMesaKeys.has(String(x.open_order_id||''))).forEach(x=>ops.push({type:'mesa',operation:'replace_open_order_items',status:x.status||'pending',label:x.open_order_id,idempotency_key:x.idempotency_key||'',attempts:x.attempts||0,last_error:x.last_error||'',payload:{open_order_id:x.open_order_id,rows:(x.payload||[]).length}}));
     (reservas||[]).filter(r=>{const info=getPersistenceStatusInfo(r,{localWhenNoRemoteId:true});return info&&info.cls!=='ok';}).forEach(r=>ops.push({type:'reserva',operation:'save_reservation',status:r._sync_status||(!r._sb_id?'pending':'error'),label:r.nombre||'Reserva',idempotency_key:`reservation:${r.legacy_id||r.id}`,attempts:0,last_error:r._sync_error||'',payload:{id:r.id,_sb_id:r._sb_id,total:getReservationTotal?.(r.items||[])||0}}));
     (gastos||[]).filter(g=>{const info=getPersistenceStatusInfo(g,{localWhenNoRemoteId:true});return info&&info.cls!=='ok';}).forEach(g=>ops.push({type:'gasto',operation:'save_expense',status:g._sync_status||(!g._sb_id?'pending':'error'),label:g.desc||'Gasto',idempotency_key:`expense:${g.legacy_id||g.id}`,attempts:0,last_error:g._sync_error||'',payload:{id:g.id,_sb_id:g._sb_id,monto:g.monto}}));
     if(turno&&turno.abierto&&(!turno._sb_id||turno._sync_status==='pending'||turno._sync_status==='error')){
@@ -6913,6 +6934,7 @@ if(config.webappUrl){loadFromSheets();}
   let ooLastTechnicalError=null;
   let ooLastOperation=null;
   let ooReadyRetryScheduled=false;
+  let ooPendingWriteRetryPromise=null;
 
   // ── Debounce / cooldown ────────────────────────────
   let ooFetching=false;
@@ -7945,6 +7967,7 @@ if(config.webappUrl){loadFromSheets();}
     ooIntervalId=setInterval(()=>{
       if(ooActiveTab()==='carga'&&document.visibilityState==='visible'){
         triggerOORefresh('interval');
+        retryPendingOpenOrderWrites({reason:'interval'}).catch(()=>{});
       }
     },12000);
   }
@@ -8038,6 +8061,30 @@ if(config.webappUrl){loadFromSheets();}
     return summary;
   };
 
+  function retryPendingOpenOrderWrites({reason='auto'}={}){
+    if(ooPendingWriteRetryPromise)return ooPendingWriteRetryPromise;
+    const initialTables=(mesas||[]).filter(m=>m&&((!m._sb_id)||m._syncing||m._sync_status==='partial_error')).length;
+    const initialItems=(pendingOpenOrderItemSyncs||[]).filter(entry=>entry&&entry.status!=='synced').length;
+    const initialTotal=initialTables+initialItems;
+    if(!initialTotal)return Promise.resolve({ok:true,reason:'empty',total:0,synced:0,failed:0});
+    if(!ooReady())return Promise.resolve({ok:false,reason:'not_ready',total:initialTotal,synced:0,failed:initialTotal});
+    ooPendingWriteRetryPromise=(async()=>{
+      await window.retryPendingOpenOrdersSync?.({silent:true});
+      await window.retryPendingOpenOrderItemSyncs?.({silent:true});
+      const remainingTables=(mesas||[]).filter(m=>m&&((!m._sb_id)||m._syncing||m._sync_status==='partial_error')).length;
+      const remainingItems=(pendingOpenOrderItemSyncs||[]).filter(entry=>entry&&entry.status!=='synced').length;
+      const remaining=remainingTables+remainingItems;
+      ooTechLog('pending writes retry',{reason,remainingTables,remainingItems});
+      return {ok:remaining===0,reason,total:remaining,synced:remaining===0?1:0,failed:remaining?1:0};
+    })().finally(()=>{
+      ooPendingWriteRetryPromise=null;
+      save();
+      renderMesasSection();
+      renderCajaPendingBanner();
+    });
+    return ooPendingWriteRetryPromise;
+  }
+
   // ── Exponer globalmente ────────────────────────────
   window.loadOpenOrdersFromSupabase=loadOpenOrdersFromSupabase;
   window.loadSingleOpenOrderFromSupabase=loadSingleOpenOrderFromSupabase;
@@ -8053,6 +8100,7 @@ if(config.webappUrl){loadFromSheets();}
   window.markOpenOrderLocalCreate=markOpenOrderLocalCreate;
   window.startOpenOrdersRealtime=startOORealtime;
   window.stopOpenOrdersRealtime=stopOORealtime;
+  window.retryPendingOpenOrderWrites=retryPendingOpenOrderWrites;
   window.getOpenOrdersSyncState=function(){
     return{
       state:ooState,
@@ -8079,12 +8127,19 @@ if(config.webappUrl){loadFromSheets();}
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'&&ooActiveTab()==='carga'){
       triggerOORefresh('focus');
+      retryPendingOpenOrderWrites({reason:'visibility'}).catch(()=>{});
     }
   });
   window.addEventListener('focus',()=>{
-    if(ooActiveTab()==='carga') triggerOORefresh('focus');
+    if(ooActiveTab()==='carga'){
+      triggerOORefresh('focus');
+      retryPendingOpenOrderWrites({reason:'focus'}).catch(()=>{});
+    }
   });
-  window.addEventListener('online',()=>triggerOORefresh('online'));
+  window.addEventListener('online',()=>{
+    triggerOORefresh('online');
+    retryPendingOpenOrderWrites({reason:'online'}).catch(()=>{});
+  });
 
   const _safeInitSupabaseAccessOO=window.safeInitSupabaseAccess;
   if(typeof _safeInitSupabaseAccessOO==='function'){
@@ -8092,6 +8147,7 @@ if(config.webappUrl){loadFromSheets();}
       const result=await _safeInitSupabaseAccessOO.apply(this,args);
       startOORealtime();
       triggerOORefresh('init');
+      retryPendingOpenOrderWrites({reason:'init'}).catch(()=>{});
       return result;
     };
   }
@@ -14770,8 +14826,8 @@ commit;`;
       window.reloadExpensesFromSupabase?.(true),
       window.reloadVisibleHistoryFromSupabase?.({silent:true,forceRefresh:true}),
       window.reloadDashboardFromSupabase?.({silent:true,forceRefresh:true}),
+      window.retryPendingOpenOrderWrites?.({reason}),
       window.retryPendingOpenOrderClosures?.({silent:true}),
-      window.retryPendingOpenOrderItemSyncs?.({silent:true}),
       window.retryPendingShiftClosures?.({silent:true})
     ].filter(Boolean);
     const results=await Promise.allSettled(tasks);
