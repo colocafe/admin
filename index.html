@@ -2437,7 +2437,7 @@ const DEFAULT_MENU=[
   {id:32,name:'Yogurt',           price:5000, cat:'beb',    stock:15, ilimitado:false, variantes:[]},
 ];
 
-const APP_VERSION='2026-06-06-responsive-ux-final';
+const APP_VERSION='2026-07-22-persistence-audit';
 const APP_DATA_VERSION='2026-04-30-supabase-v1';
 const APP_DATA_VERSION_KEY='colo_app_data_version';
 const CATALOG_BACKUP_KEY='colo_catalog_backup';
@@ -2455,16 +2455,27 @@ function countLocalArray(key){
   const value=readLocalArray(key);
   return Array.isArray(value)?value.length:0;
 }
-function clearLegacyCatalogCache(reason='version'){
-  ['cats','menu',CATALOG_BACKUP_KEY].forEach(key=>localStorage.removeItem(key));
+function preserveLegacyCatalogCache(reason='version'){
+  const cachedCats=readLocalArray('cats')||[];
+  const cachedMenu=readLocalArray('menu')||[];
+  if((cachedCats.length||cachedMenu.length)&&!localStorage.getItem(CATALOG_BACKUP_KEY)){
+    localStorage.setItem(CATALOG_BACKUP_KEY,JSON.stringify({
+      version:localStorage.getItem(APP_DATA_VERSION_KEY)||'',
+      appVersion:APP_VERSION,
+      preservedAt:new Date().toISOString(),
+      reason,
+      cats:cachedCats,
+      menu:cachedMenu
+    }));
+  }
   localStorage.setItem(APP_DATA_VERSION_KEY,APP_DATA_VERSION);
-  window.__coloLocalCacheCleared={reason,at:new Date().toISOString()};
+  window.__coloLocalCachePreserved={reason,at:new Date().toISOString()};
 }
 
 const storedDataVersion=localStorage.getItem(APP_DATA_VERSION_KEY)||'';
 const legacyCatalogCounts={categories:countLocalArray('cats'),products:countLocalArray('menu')};
 if(storedDataVersion!==APP_DATA_VERSION){
-  clearLegacyCatalogCache(storedDataVersion?'version_mismatch':'missing_version');
+  preserveLegacyCatalogCache(storedDataVersion?'version_mismatch':'missing_version');
 }
 
 let cats      = readLocalArray('cats')||DEFAULT_CATS;
@@ -2498,8 +2509,10 @@ window.__catalogBootState={
   supabaseCategories:0,
   supabaseProducts:0,
   lastSupabaseReadAt:'',
-  localCacheCleared:!!window.__coloLocalCacheCleared,
-  localCacheClearedReason:window.__coloLocalCacheCleared?.reason||'',
+  localCacheCleared:false,
+  localCacheClearedReason:'',
+  localCachePreserved:!!window.__coloLocalCachePreserved,
+  localCachePreservedReason:window.__coloLocalCachePreserved?.reason||'',
   serviceWorkerUnregistered:false
 };
 function updateCatalogBootState(patch={}){
@@ -2620,12 +2633,42 @@ function reservationsReferToSame(a,b){
   const aIds=getReservationIdentityValues(a),bIds=getReservationIdentityValues(b);
   return aIds.some(id=>bIds.includes(id));
 }
-function mergeRemoteReservationsWithOptimistic(remoteList){
+function getPersistenceIdentityValues(record){
+  return [record?.id,record?._sb_id,record?.legacy_id,record?.open_order_id,record?.legacy_local_id]
+    .map(v=>String(v||''))
+    .filter(Boolean);
+}
+function persistenceRecordsReferToSame(a,b){
+  const aIds=getPersistenceIdentityValues(a),bIds=getPersistenceIdentityValues(b);
+  return aIds.some(id=>bIds.includes(id));
+}
+function isLocalPersistencePending(record){
+  if(!record)return false;
+  const raw=String(record._sync_status||record._persistence_status||record.metadata?.persistence_status||'').toLowerCase();
+  return !!record._syncing || !record._sb_id || ['pending','pending_local','error','failed','sync_error','partial_error','close_pending'].includes(raw);
+}
+function mergeRemoteRecordsWithLocalPending(remoteList,localList,shouldPreserve=isLocalPersistencePending){
   const merged=[...(remoteList||[])];
-  (reservas||[]).filter(r=>isReservationPending(r)&&isReservationVisibleInCaja(r)).forEach(local=>{
-    if(!merged.some(remote=>reservationsReferToSame(remote,local)))merged.push(local);
+  (localList||[]).filter(shouldPreserve).forEach(local=>{
+    const idx=merged.findIndex(remote=>persistenceRecordsReferToSame(remote,local));
+    if(idx>=0){
+      const remote=merged[idx];
+      merged[idx]={
+        ...remote,
+        ...local,
+        _sb_id:local._sb_id||remote._sb_id||null,
+        legacy_id:local.legacy_id||remote.legacy_id||null,
+        open_order_id:local.open_order_id||remote.open_order_id||null,
+        legacy_local_id:local.legacy_local_id||remote.legacy_local_id||''
+      };
+    }else merged.push(local);
   });
   return merged;
+}
+function mergeRemoteReservationsWithOptimistic(remoteList){
+  return mergeRemoteRecordsWithLocalPending(remoteList,reservas,r=>
+    isReservationPending(r)||isLocalPersistencePending(r)
+  );
 }
 function isReservationVisibleInCaja(reservation){
   if(!reservation||isReservationOptimisticallyHidden(reservation))return false;
@@ -3453,7 +3496,9 @@ window._addOperadorFromAjustes=async function(){
   const sbResult=await saveOperatorToSupabase(name);
   if(input) input.value='';
   renderOperadoresSection();
-  showToast(`✓ Operador "${name}" guardado`);
+  showToast(sbResult?.id
+    ? `Operador "${name}" guardado.`
+    : `Operador "${name}" guardado en este dispositivo. Pendiente de sincronizar.`);
 };
 
 // ══════════════════════════════════════════════════
@@ -3644,7 +3689,14 @@ function renderAjustesConfig(){
   if($('cfg-sheet-adj')&&config.sheetId)$('cfg-sheet-adj').value=config.sheetId;
   if($('cfg-url-adj')&&config.webappUrl)$('cfg-url-adj').value=config.webappUrl;
 }
-function limpiarVentas(){ventas=[];gastos=[];save();renderDashboard();renderHistorial();showToast('✓ Limpiado');}
+function limpiarVentas(){
+  const pending=window.findPendingSalesSyncGroups?.(ventas||[])||[];
+  if(pending.length){
+    showToast(`No se puede limpiar: hay ${pending.length} venta${pending.length===1?'':'s'} pendiente${pending.length===1?'':'s'} de sincronizar.`);
+    return;
+  }
+  ventas=[];save();renderDashboard();renderHistorial();showToast('Historial local de ventas limpiado.');
+}
 function renderStockAlerts(){
   const el=$('stock-alerts');if(!el)return;
   const out=menu.filter(p=>!p.ilimitado&&p.stock<=0),low=menu.filter(p=>!p.ilimitado&&p.stock>0&&p.stock<=5);
@@ -4059,12 +4111,12 @@ async function confirmarNuevaMesa(){
   const synced=await window.syncMesaToSupabase?.(m).catch(()=>false);
   m._syncing=!synced;
   save();
-  if(synced===false && window.getOpenOrdersSyncState?.()?.ready){
-    removeMesaByAnyId(m.id);
+  if(synced===false){
+    m._sync_status=m._sync_status==='partial_error'?'partial_error':'error';
+    m._sync_error=m._sync_error||'No se confirmó el guardado remoto de la mesa';
     save();
     renderMesasSection();
-    showToast('No pudimos crear la mesa. Reintentá.');
-    return;
+    showToast('Mesa guardada en este dispositivo. Pendiente de sincronizar.');
   }
   // Post-creación: forzar refresh rápido para sincronizar con otros dispositivos
   setTimeout(()=>window.triggerOORefresh?.('post_action'),700);
@@ -4109,11 +4161,14 @@ async function abrirMesa(id){
   }
   const openId=getMesaOpenOrderId(m);
   if(m._sb_id&&window.checkOpenOrderStillOpen){
-    const stillOpen=await window.checkOpenOrderStillOpen(m._sb_id).catch(()=>true);
+    const stillOpen=await window.checkOpenOrderStillOpen(m._sb_id).catch(()=>null);
     if(stillOpen===false){
       removeMesaByAnyId(openId);save();renderMesasSection();
       showToast('Esta mesa ya fue cerrada o no está disponible.');
       return;
+    }
+    if(stillOpen!==true){
+      showToast('No pudimos verificar esta mesa. Mostrando datos guardados; los cambios quedarán pendientes.');
     }
   }
   mesaActivaId=openId;carrito={};
@@ -4177,13 +4232,13 @@ function findExistingReservationSaleRows(reservation){
   ));
 }
 async function reservationHasRemoteSale(reservation){
-  if(!reservation)return false;
+  if(!reservation)return null;
   const storeId=window.getActiveStoreId?.()||config?.activeStoreId||'';
   const client=window.getSupabaseClient?.()||window.__coloSupabaseClient||null;
-  if(!client||!storeId)return false;
+  if(!client||!storeId)return null;
   try{
     const {data:session}=await cajaWithTimeout(client.auth.getSession(),'sales_session',5000);
-    if(!session?.session)return false;
+    if(!session?.session)return null;
     if(window.isValidUuid?.(String(reservation._sb_id||''))){
       const res=await cajaWithTimeout(client.from('sales').select('id').eq('store_id',storeId).eq('reservation_id',reservation._sb_id).limit(1),'reservation_sale_lookup',7000);
       if(res.error)throw res.error;
@@ -4197,6 +4252,7 @@ async function reservationHasRemoteSale(reservation){
     }
   }catch(err){
     if(window.canShowClientTechnicalUi?.())console.warn('[Caja] reservation sale duplicate check failed',err);
+    return null;
   }
   return false;
 }
@@ -4329,8 +4385,20 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
         if(!r){showToast('No pudimos cobrar la reserva. Reintentá.');return;}
         reservaActiva=r;tipoVenta=r.tipo||'salon';nombreMesa=r.nombre;
         clienteReserva=clientes.find(c=>String(c.id||'')===String(r.clienteId||''))||null;
-        if(findExistingReservationSaleRows(r).length||await reservationHasRemoteSale(r)){
+        const localReservationSales=findExistingReservationSaleRows(r);
+        const confirmedLocalReservationSale=localReservationSales.some(row=>row?._sb_sync_status==='synced'&&row?._sb_sale_id);
+        if(localReservationSales.length&&!confirmedLocalReservationSale){
+          showToast('Hay un cobro de esta reserva pendiente de sincronizar. Reintentá desde Operaciones pendientes.');
+          return;
+        }
+        const remoteReservationSale=confirmedLocalReservationSale?true:await reservationHasRemoteSale(r);
+        if(remoteReservationSale===null){
+          showToast('No pudimos verificar esta reserva. Reintentá antes de cobrar.');
+          return;
+        }
+        if(remoteReservationSale===true){
           r.estado='pagada';r.pago=paymentState.pago;r.payment_mode=paymentState.payment_mode;r.pagos=paymentState.pagos;
+          r._sync_status='pending';r._sync_error='';
           markReservationHidden(r,'already_paid');
           save();syncReservasSheets();window.saveReservationToSupabase?.(r).catch(err=>window.canShowClientTechnicalUi?.()&&console.warn('[Caja] reserva ya cobrada, update failed',err));
           showToast('Esta reserva ya estaba cobrada.');
@@ -4395,6 +4463,7 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
       }
       if(esReserva&&reservaActiva){
         reservaActiva.estado='pagada';reservaActiva.pago=paymentState.pago;reservaActiva.payment_mode=paymentState.payment_mode;reservaActiva.pagos=paymentState.pagos;
+        reservaActiva._sync_status='pending';reservaActiva._sync_error='';
         markReservationHidden(reservaActiva,'payment');
       }else{
         const mesaCobrada=findMesaByAnyId(mesaActivaId);
@@ -4446,11 +4515,16 @@ async function ejecutarCobro(operadorCobro,operatorIdCobro){
       cajaWithTimeout(syncVentasSheets(nuevas),'sync_ventas_sheets',10000).catch(err=>window.canShowClientTechnicalUi?.()&&console.warn('[Caja] Sheets falló después de confirmar venta',err));
       if(esReserva&&reservaActiva&&window.saveReservationToSupabase){
         try{
-          await cajaWithTimeout(window.saveReservationToSupabase(reservaActiva),'close_reservation_supabase',10000);
+          const reservationSync=await cajaWithTimeout(window.saveReservationToSupabase(reservaActiva),'close_reservation_supabase',10000);
+          if(!reservationSync?.id)throw new Error('No se confirmó el estado remoto de la reserva');
           showToast('Reserva cobrada.');
           window.reloadCustomersReservationsFromSupabase?.(true).then(()=>renderReservasSection()).catch(()=>{});
         }catch(err){
           if(window.canShowClientTechnicalUi?.())console.warn('[Caja] venta creada pero reserva no se actualizó en Supabase',err);
+          reservaActiva._sync_status='error';
+          reservaActiva._sync_error=err?.message||String(err);
+          save();renderReservasSection();renderCajaPendingBanner();
+          showToast('Venta cobrada. Estado de reserva pendiente de sincronizar.');
         }
       }else{
         if(!mesaClosePending)showToast('✓ Venta guardada');
@@ -4863,6 +4937,7 @@ function renderDashboard(){
   const vh=useSupabase||useFallback?(dashboardState?.rows||[]):(showLoading?[]:localRows);
   const ticketGroups=useSupabase||useFallback?(dashboardState?.tickets||[]):(showLoading?[]:localTickets);
   const vg=gastos.filter(g=>g.fecha>=desde&&g.fecha<=hasta);
+  const pendingExpenses=vg.filter(isLocalPersistencePending).length;
   const totalV=vh.reduce((s,v)=>s+v.total,0);
   const totalG=vg.reduce((s,g)=>s+g.monto,0);
   const ganancia=totalV-totalG;
@@ -4906,7 +4981,7 @@ function renderDashboard(){
   // KPIs
   $('kpi-grid').innerHTML=`
     <div class="kpi"><div class="kpi-lbl">Total ventas</div><div class="kpi-val">${fmt(totalV)}</div>${formatDeltaKpi(compDelta,compLabel)}</div>
-    <div class="kpi"><div class="kpi-lbl">Gastos</div><div class="kpi-val" style="color:var(--red)">${fmt(totalG)}</div><div class="kpi-sub">${vg.length} registros</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gastos</div><div class="kpi-val" style="color:var(--red)">${fmt(totalG)}</div><div class="kpi-sub">${vg.length} registros${pendingExpenses?` · ${pendingExpenses} pendiente${pendingExpenses===1?'':'s'}`:''}</div></div>
     <div class="kpi"><div class="kpi-lbl">Ganancia neta</div><div class="kpi-val" style="color:${ganancia>=0?'var(--green)':'var(--red)'}">${fmt(ganancia)}</div><div class="kpi-sub">ventas − gastos</div></div>
     <div class="kpi"><div class="kpi-lbl">Ticket promedio</div><div class="kpi-val">${fmt(promP)}</div><div class="kpi-sub">${txP} transacciones</div></div>`;
 
@@ -5198,8 +5273,28 @@ function openClienteModal(id,retorno){
 }
 function pedirEliminarCliente(id){
   const c=clientes.find(x=>x.id===id);cerrarModalCliente();
-  pedirConfirm(`¿Eliminar a "${c?.nombre||''}"?`,()=>{clientes=clientes.filter(x=>x.id!==id);save();renderClientesTab();syncClientesSheets();showToast('✓ Cliente eliminado');});
+  pedirConfirm(`¿Eliminar a "${c?.nombre||''}"?`,()=>eliminarClienteConfirmado(id));
 }
+async function eliminarClienteConfirmado(id){
+  const customer=clientes.find(x=>sameId(x.id,id));if(!customer)return;
+  const hasRemoteContext=!!(config?.supabaseUrl&&config?.supabaseAnonKey&&config?.activeStoreId&&window.getSupabaseClient?.());
+  if(customer._sb_id&&!hasRemoteContext){
+    showToast('No pudimos verificar el servidor. El cliente no fue eliminado.');
+    return;
+  }
+  try{
+    if(hasRemoteContext){
+      if(!window.deleteCustomerFromSupabase)throw new Error('No se pudo eliminar el cliente');
+      await window.deleteCustomerFromSupabase(customer);
+    }
+    clientes=clientes.filter(x=>!sameId(x.id,id));save();renderClientesTab();syncClientesSheets();
+    showToast('Cliente eliminado.');
+  }catch(err){
+    if(window.canShowClientTechnicalUi?.())console.warn('[Clientes] delete failed',err);
+    showToast('No pudimos eliminar el cliente. Reintentá.');
+  }
+}
+pedirEliminarCliente.__remoteFirst=true;
 function cerrarModalCliente(){$('modal-cliente').classList.remove('open');clienteModalRetorno=null;}
 function closeModalCliente(e){if(e.target===$('modal-cliente'))cerrarModalCliente();}
 function guardarCliente(){
@@ -5228,7 +5323,9 @@ function guardarCliente(){
     ['salon','delivery','takeaway'].forEach(t=>{$(`rtipo-btn-${t}`).className=`tipo-btn${t===tipoNuevaMesaReserva?' sel-'+t:''}`;});
     $('modal-reserva').classList.add('open');
   }
-  showToast(editClienteId?'✓ Cliente actualizado':'✓ Cliente agregado');
+  if(!window.__customerRemoteGuardActive){
+    showToast('Cliente guardado en este dispositivo. Pendiente de sincronizar.');
+  }
 }
 
 // ══════════════════════════════════════════════════
@@ -5270,7 +5367,25 @@ function setCatColor(i,col){cats[i].color=col;save();renderCatMgr();renderCargaC
 function renameCat(i,val){const v=val.trim();if(!v||cats[i]?.name===v)return;cats[i].name=v;save();renderCargaCats();populateCatSelect();}
 function setSeccion(i,val){if(cats[i])cats[i].seccion=val;save();}
 function setCatReservable(i,checked){if(cats[i])cats[i].reservable=checked;save();showToast(checked?'✓ Categoría reservable':'Categoría sin reserva');}
-function deleteCat(i){const c=cats[i];if(menu.some(p=>p.cat===c.id)){showToast('No se puede — tiene productos');return;}cats.splice(i,1);save();renderCatMgr();renderCargaCats();showToast('Categoría eliminada');}
+function hasCatalogRemoteWriteContext(){
+  return !!(config?.supabaseUrl&&config?.supabaseAnonKey&&config?.activeStoreId&&window.getSupabaseClient?.());
+}
+async function deleteCat(i){
+  const c=cats[i];if(!c)return;
+  if(menu.some(p=>p.cat===c.id)){showToast('No se puede — tiene productos');return;}
+  if(!hasCatalogRemoteWriteContext()||!window.deleteCategoryFromSupabase){
+    showToast('No pudimos verificar el servidor. La categoría no fue eliminada.');
+    return;
+  }
+  try{
+    await window.deleteCategoryFromSupabase(c);
+    cats.splice(i,1);save();renderCatMgr();renderCargaCats();showToast('Categoría eliminada.');
+  }catch(err){
+    if(window.canShowClientTechnicalUi?.())console.warn('[Catalog] category delete failed',err);
+    showToast('No pudimos eliminar la categoría. Reintentá.');
+  }
+}
+deleteCat.__remoteFirst=true;
 function addCat(){
   // Open accordion + switch tab so it's visible when we return
   const body=$('acc-body-menu');if(body&&!body.classList.contains('open')){toggleAccordion('menu');}
@@ -5335,7 +5450,26 @@ function openProdModal(id){
   renderVariantesModalBody();updateVariantesBadge();
   $('modal-prod').classList.add('open');setTimeout(()=>$('m-nombre').focus(),100);
 }
-function pedirEliminarProducto(id){const p=menu.find(x=>sameId(x.id,id));closeProdModal();pedirConfirm(`¿Eliminar "${p?.name||''}"?`,()=>{menu=menu.filter(x=>!sameId(x.id,id));save();renderMenuAdm();renderProdGrid();syncMenuSheets();showToast('✓ Producto eliminado');});}
+function pedirEliminarProducto(id){
+  const p=menu.find(x=>sameId(x.id,id));closeProdModal();
+  pedirConfirm(`¿Eliminar "${p?.name||''}"?`,()=>eliminarProductoConfirmado(id));
+}
+async function eliminarProductoConfirmado(id){
+  const p=menu.find(x=>sameId(x.id,id));if(!p)return;
+  if(!hasCatalogRemoteWriteContext()||!window.deleteProductFromSupabase){
+    showToast('No pudimos verificar el servidor. El producto no fue eliminado.');
+    return;
+  }
+  try{
+    await window.deleteProductFromSupabase(p);
+    menu=menu.filter(x=>!sameId(x.id,id));save();renderMenuAdm();renderProdGrid();syncMenuSheets();
+    showToast('Producto eliminado.');
+  }catch(err){
+    if(window.canShowClientTechnicalUi?.())console.warn('[Catalog] product delete failed',err);
+    showToast('No pudimos eliminar el producto. Reintentá.');
+  }
+}
+pedirEliminarProducto.__remoteFirst=true;
 function closeProdModal(){$('modal-prod').classList.remove('open');}
 function closeProdModalOutside(e){if(e.target===$('modal-prod'))closeProdModal();}
 async function guardarProducto(){
@@ -5648,10 +5782,9 @@ guardarEditCat.__remoteFirst=true;
 // ── Eliminar producto desde lista (sin abrir modal) ──
 function pedirEliminarProductoInline(id){
   const p=menu.find(x=>sameId(x.id,id));if(!p)return;
-  pedirConfirm(`¿Eliminar "${p.name}"?`,()=>{
-    menu=menu.filter(x=>!sameId(x.id,id));save();renderMenuAdm();renderProdGrid();syncMenuSheets();showToast('✓ Producto eliminado');
-  });
+  pedirConfirm(`¿Eliminar "${p.name}"?`,()=>eliminarProductoConfirmado(id));
 }
+pedirEliminarProductoInline.__remoteFirst=true;
 
 // ══════════════════════════════════════════════════
 //  INIT
@@ -6033,12 +6166,12 @@ if(config.webappUrl){loadFromSheets();}
         salesRes,itemsRes,paymentsRes,reservationsRes,ordersRes,orderItemsRes,expensesRes,shiftsRes,productsRes,categoriesRes
       ]=await Promise.all([
         client.from('sales').select('id,legacy_id,business_date,sold_at,operator_name,total_amount,reservation_id,open_order_id,metadata').eq('store_id',storeId).limit(5000),
-        client.from('sale_items').select('id,sale_id,line_total,total_amount,quantity,unit_price,metadata').eq('store_id',storeId).limit(10000),
+        client.from('sale_items').select('id,sale_id,line_total,quantity,unit_price,metadata').eq('store_id',storeId).limit(10000),
         client.from('sale_payments').select('id,sale_id,amount,method,metadata').eq('store_id',storeId).limit(10000),
         client.from('reservations').select('id,legacy_id,status,reservation_at,total_amount').eq('store_id',storeId).limit(5000),
         client.from('open_orders').select('id,legacy_id,status,opened_at,metadata').eq('store_id',storeId).limit(5000),
         client.from('open_order_items').select('id,open_order_id,line_total,quantity,unit_price,metadata').eq('store_id',storeId).limit(10000),
-        client.from('expenses').select('id,store_id,legacy_id,amount,business_date').eq('store_id',storeId).limit(5000),
+        client.from('expenses').select('id,store_id,legacy_id,amount,business_date').or(`store_id.eq.${storeId},store_id.is.null`).limit(5000),
         client.from('shifts').select('id,status,opened_at,closed_at,opened_by_name').eq('store_id',storeId).limit(1000),
         client.from('products').select('id,category_id,name,active').eq('store_id',storeId).limit(5000),
         client.from('categories').select('id,name,active').eq('store_id',storeId).limit(1000)
@@ -6058,12 +6191,30 @@ if(config.webappUrl){loadFromSheets();}
       result.issues.itemsTotalMismatch=salesRows.filter(s=>Math.abs(money2((itemsBySale.get(s.id)||[]).reduce((sum,i)=>sum+money2(i.line_total??((Number(i.quantity)||0)*(Number(i.unit_price)||0))),0))-money2(s.total_amount))>1).map(s=>s.legacy_id||s.id);
       result.issues.orphanPayments=paymentRows.filter(p=>!saleIds.has(String(p.sale_id))).map(p=>p.id);
       result.issues.orphanItems=itemRows.filter(i=>!saleIds.has(String(i.sale_id))).map(i=>i.id);
-      const salesReservationIds=new Set(salesRows.map(s=>String(s.reservation_id||'')).filter(Boolean));
-      result.issues.paidReservationsWithoutSale=reservationRows.filter(r=>RESERVA_INACTIVE_STATUSES.has(normalizeReservaStatus(r.status))&&!salesReservationIds.has(String(r.id))).map(r=>r.legacy_id||r.id);
+      const salesReservationIds=new Set(salesRows.flatMap(s=>[
+        s.reservation_id,
+        s.metadata?.reservation_id,
+        s.metadata?.reservation_local_id,
+        s.metadata?._reservation_sb_id,
+        s.metadata?._reservation_local_id
+      ]).map(v=>String(v||'')).filter(Boolean));
+      const paidReservationStatuses=new Set(['paid','pagada','pagado','cobrada','cobrado']);
+      result.issues.paidReservationsWithoutSale=reservationRows.filter(r=>
+        paidReservationStatuses.has(normalizeReservaStatus(r.status))&&
+        ![r.id,r.legacy_id].map(v=>String(v||'')).some(id=>id&&salesReservationIds.has(id))
+      ).map(r=>r.legacy_id||r.id);
       const salesOpenOrderIds=new Set(salesRows.map(s=>String(s.open_order_id||'')).filter(Boolean));
       result.issues.closedOpenOrdersWithoutSale=orderRows.filter(o=>['closed','paid'].includes(String(o.status||'').toLowerCase())&&!salesOpenOrderIds.has(String(o.id))).map(o=>o.legacy_id||o.id);
       const orderItemsByOrder=new Map();orderItemRows.forEach(row=>{(orderItemsByOrder.get(row.open_order_id)||orderItemsByOrder.set(row.open_order_id,[]).get(row.open_order_id)).push(row);});
-      result.issues.openOrdersWithItemsWithoutSale=orderRows.filter(o=>(orderItemsByOrder.get(o.id)||[]).length&&!salesOpenOrderIds.has(String(o.id))).map(o=>o.legacy_id||o.id);
+      const openOrderIds=new Set(orderRows.map(o=>String(o.id)));
+      result.issues.orphanOpenOrderItems=orderItemRows.filter(item=>!openOrderIds.has(String(item.open_order_id))).map(item=>item.id);
+      result.issues.openOrdersWithItemsWithoutSale=orderRows.filter(o=>{
+        if(!(orderItemsByOrder.get(o.id)||[]).length||salesOpenOrderIds.has(String(o.id)))return false;
+        if(String(o.status||'').toLowerCase()!=='open')return true;
+        const openedAt=o.opened_at?new Date(o.opened_at).getTime():0;
+        return !!openedAt&&openedAt<Date.now()-18*60*60*1000;
+      }).map(o=>o.legacy_id||o.id);
+      result.issues.expensesWithoutStoreId=expenseRows.filter(e=>!e.store_id).map(e=>e.legacy_id||e.id);
       const byLegacy={};salesRows.forEach(s=>{if(s.legacy_id)byLegacy[s.legacy_id]=(byLegacy[s.legacy_id]||0)+1;});
       result.issues.duplicateSaleLegacyIds=Object.entries(byLegacy).filter(([,count])=>count>1).map(([legacy_id,count])=>({legacy_id,count}));
       result.issues.pendingReservationsOverdue=reservationRows.filter(r=>['pending','pendiente'].includes(normalizeReservaStatus(r.status))&&r.reservation_at&&new Date(r.reservation_at).getTime()<Date.now()-60*60*1000).map(r=>r.legacy_id||r.id);
@@ -6261,7 +6412,7 @@ if(config.webappUrl){loadFromSheets();}
         supportMetric('Productos en este dispositivo', (menu||[]).length),
         supportButton('Actualizar catálogo','reloadCatalogFromSupabase()','alt')+
         supportButton('Diagnosticar catálogo','probeCatalogSupabaseRead()'),
-        `<details style="font-size:12px;color:var(--ink2)"><summary style="cursor:pointer;font-weight:700;color:var(--ink)">Acciones avanzadas</summary><div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">${supportButton('Subir catálogo actual','syncLocalCatalogToSupabase()')}${supportButton('Probar guardado de catálogo','debugCatalogWritePermissions()')}${supportButton('Revisar catálogo','debugCatalogSupabase()')}${supportButton('Limpiar datos guardados en este dispositivo','clearLocalTechnicalCache()','danger')}</div></details>`),
+        `<details style="font-size:12px;color:var(--ink2)"><summary style="cursor:pointer;font-weight:700;color:var(--ink)">Acciones avanzadas</summary><div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">${supportButton('Subir catálogo actual','syncLocalCatalogToSupabase()')}${supportButton('Probar guardado de catálogo','debugCatalogWritePermissions()')}${supportButton('Revisar catálogo','debugCatalogSupabase()')}${supportButton('Recargar catálogo desde servidor','reloadCatalogFromSupabase()')}</div></details>`),
       supportCard('Ventas / Historial / Dashboard','Revisá que las ventas impacten correctamente en los reportes.',
         supportMetric('Ventas locales', (ventas||[]).length)+
         supportMetric('Última actualización de Historial', historyState.lastReadAt||'—')+
@@ -6784,6 +6935,12 @@ if(config.webappUrl){loadFromSheets();}
     try{ return JSON.parse(localStorage.getItem('config')||'{}').activeStoreId||''; }catch{return '';}
   }
   function ooReady(){return !!(ooClient()&&ooStoreId());}
+  function ooShouldPreserveLocal(mesa){
+    return isLocalPersistencePending(mesa)||!!getPendingOpenOrderClosureForMesa(mesa);
+  }
+  function ooMergeRemoteWithPending(remoteOrders){
+    return mergeRemoteRecordsWithLocalPending(remoteOrders,mesas,ooShouldPreserveLocal);
+  }
   function ooStamp(){
     try{return(typeof window.getLocalDateString==='function')?`${window.getLocalDateString()} ${window.getLocalTimeString?.()??''}`:new Date().toLocaleString();}
     catch{return new Date().toLocaleString();}
@@ -6996,8 +7153,8 @@ if(config.webappUrl){loadFromSheets();}
           console.warn('[open_orders] recent local mesa not found after retry',{storeId,localCount:ooLocalMesaCount()});
           return{ok:false,reason:'empty_after_create',message:msg};
         }
-        // Supabase dice 0 mesas abiertas sin creación reciente → limpiar local
-        mesas=[];
+        // Una lectura remota vacía no puede borrar mesas locales todavía pendientes.
+        mesas=ooMergeRemoteWithPending([]);
         if(typeof window.save==='function')window.save();
         ooHasSupabaseRead=true;ooSetState('supabase','');ooLastRead=ooStamp();ooCount=0;ooItemCount=0;ooUpdateDiag();
         ooRenderVisible();
@@ -7014,7 +7171,7 @@ if(config.webappUrl){loadFromSheets();}
       }
 
       if(!orders.length){
-        mesas=[];
+        mesas=ooMergeRemoteWithPending([]);
         if(typeof window.save==='function')window.save();
         ooHasSupabaseRead=true;ooSetState('supabase','');ooLastRead=ooStamp();ooCount=0;ooItemCount=0;ooUpdateDiag();
         ooRenderVisible();
@@ -7081,7 +7238,7 @@ if(config.webappUrl){loadFromSheets();}
         }
       }
 
-      mesas=newMesas;
+      mesas=ooMergeRemoteWithPending(newMesas);
       if(typeof window.save==='function')window.save();
       ooHasSupabaseRead=true;ooSetState('supabase','');ooLastRead=ooStamp();ooCount=orders.length;ooItemCount=(items||[]).length;ooUpdateDiag();
       ooRenderVisible();
@@ -7223,6 +7380,19 @@ if(config.webappUrl){loadFromSheets();}
       }
     };
     try{
+      const legacyLocalId=String(payload.metadata.legacy_local_id||'');
+      if(legacyLocalId){
+        ooRememberOperation('open_orders','select_existing_local_id',`select open_order by metadata.legacy_local_id=${legacyLocalId}`);
+        const existing=await ooWithTimeout(client
+          .from('open_orders')
+          .select('id')
+          .eq('store_id',storeId)
+          .eq('status','open')
+          .contains('metadata',{legacy_local_id:legacyLocalId})
+          .maybeSingle(),'open_order_existing_local_id');
+        if(existing.error)throw existing.error;
+        if(existing.data?.id)return existing.data.id;
+      }
       ooRememberOperation('open_orders','insert','insert open_order with label/table_label');
       const{data,error}=await client
         .from('open_orders')
@@ -7308,7 +7478,8 @@ if(config.webappUrl){loadFromSheets();}
     try{
       // Replace-all strategy: delete + insert
       ooRememberOperation('open_order_items','delete_existing',`delete items where store_id=${storeId} and open_order_id=${sbOrderId}`);
-      await client.from('open_order_items').delete().eq('open_order_id',sbOrderId).eq('store_id',storeId);
+      const deleteRes=await client.from('open_order_items').delete().eq('open_order_id',sbOrderId).eq('store_id',storeId);
+      if(deleteRes.error)throw deleteRes.error;
       if(rows.length){
         ooRememberOperation('open_order_items','insert',`insert ${rows.length} current cart items`);
         let {error}=await client.from('open_order_items').insert(rows);
@@ -7371,8 +7542,9 @@ if(config.webappUrl){loadFromSheets();}
       }
     }
     if(!mesa._sb_id)return false;
-    await updateOpenOrderHeaderInSupabase(mesa,storeId);
-    const ok=await syncOpenOrderItems(mesa._sb_id,mesa.items||{},storeId);
+    const headerOk=await updateOpenOrderHeaderInSupabase(mesa,storeId);
+    const itemsOk=await syncOpenOrderItems(mesa._sb_id,mesa.items||{},storeId);
+    const ok=headerOk&&itemsOk;
     mesa._syncing=!ok;
     mesa._sync_status=ok?'confirmed':'partial_error';
     mesa._sync_error=ok?'':'No pudimos actualizar todos los ítems de la mesa';
@@ -7445,7 +7617,8 @@ if(config.webappUrl){loadFromSheets();}
       if(current.error)throw current.error;
       if(!current.data){
         if(opts.deleteItems!==false){
-          await ooWithTimeout(client.from('open_order_items').delete().eq('open_order_id',sbId).eq('store_id',storeId),'close_missing_open_order_items_delete');
+          const itemDelete=await ooWithTimeout(client.from('open_order_items').delete().eq('open_order_id',sbId).eq('store_id',storeId),'close_missing_open_order_items_delete');
+          if(itemDelete.error)throw itemDelete.error;
         }
         return true;
       }
@@ -7466,6 +7639,9 @@ if(config.webappUrl){loadFromSheets();}
         .select('id,status')
         .maybeSingle(),'close_open_order_update');
       if(update.error)throw update.error;
+      if(!update.data||String(update.data.status||'')==='open'){
+        throw new Error('No se confirmó el cierre remoto de la mesa');
+      }
 
       if(opts.deleteItems!==false){
         ooRememberOperation('open_order_items','close_delete_items',`delete items for closed open_order ${sbId}`);
@@ -7491,7 +7667,7 @@ if(config.webappUrl){loadFromSheets();}
           deleted=true;
         }
       }
-      return deleted||!update.data||String(update.data.status||'')!=='open';
+      return deleted||String(update.data.status||'')!=='open';
     }catch(err){
       ooRememberError(err,{table:'open_orders',operation:'close',query:'update status=closed and delete items',store_id:storeId});
       if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] close failed:',{
@@ -7576,8 +7752,8 @@ if(config.webappUrl){loadFromSheets();}
           .eq('open_order_id',sbId);
         if(saleCheck.error){
           ooRememberError(saleCheck.error,{table:'sales',operation:'check_sale_for_open_order',query:'count sales by open_order_id',store_id:storeId});
-          if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] sale check failed; treating open_order status as source of truth',saleCheck.error);
-          return true;
+          if(window.canShowClientTechnicalUi?.())console.warn('[open_orders] sale check failed; payment remains blocked until verification succeeds',saleCheck.error);
+          return null;
         }
         if((Number(saleCheck.count)||0)>0){
           reconcileSoldOpenOrders([sbId],{reason:'check_sold'}).catch(err=>{
@@ -7830,7 +8006,8 @@ if(config.webappUrl){loadFromSheets();}
       savePendingOutboxes();
       try{
         const rows=Array.isArray(entry.payload)?entry.payload:[];
-        await ooWithTimeout(client.from('open_order_items').delete().eq('open_order_id',entry.open_order_id).eq('store_id',storeId),'retry_items_delete');
+        const deleteRes=await ooWithTimeout(client.from('open_order_items').delete().eq('open_order_id',entry.open_order_id).eq('store_id',storeId),'retry_items_delete');
+        if(deleteRes.error)throw deleteRes.error;
         if(rows.length){
           let {error}=await client.from('open_order_items').insert(rows);
           if(error&&String(error.message||'').toLowerCase().includes('line_total')){
@@ -8322,7 +8499,6 @@ if(config.webappUrl){loadFromSheets();}
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn ghost" type="button" onclick="probeCatalogSupabaseRead()">Probar lectura catálogo Supabase</button>
         <button class="btn ghost" type="button" onclick="reloadCatalogFromSupabase()">Recargar catálogo desde Supabase</button>
-        <button class="btn ghost" type="button" onclick="clearLocalTechnicalCache()">Limpiar caché local</button>
         <button class="btn ghost" type="button" onclick="syncLocalCatalogToSupabase()">Subir catálogo actual a Supabase</button>
         <button class="btn ghost" type="button" onclick="debugCatalogWritePermissions()">Probar permisos write catálogo</button>
         <button class="btn ghost" type="button" onclick="debugCatalogSupabase()">Debug catálogo</button>
@@ -8351,7 +8527,7 @@ if(config.webappUrl){loadFromSheets();}
         <div><strong>Rol:</strong> ${window.getActiveStoreRole?.()||catalogCurrentRole||'—'}</div>
         <div><strong>Cantidad local:</strong> ${cats.length} categorías · ${menu.length} productos</div>
         <div><strong>Cantidad Supabase:</strong> ${catalogSupabaseCounts.categories} categorías · ${catalogSupabaseCounts.products} productos</div>
-        <div><strong>Caché local limpiada:</strong> ${window.__catalogBootState?.localCacheCleared?'Sí':'No'}${window.__catalogBootState?.localCacheClearedReason?` · ${window.__catalogBootState.localCacheClearedReason}`:''}</div>
+        <div><strong>Caché local preservada al actualizar:</strong> ${window.__catalogBootState?.localCachePreserved?'Sí':'No'}${window.__catalogBootState?.localCachePreservedReason?` · ${window.__catalogBootState.localCachePreservedReason}`:''}</div>
         <div><strong>Service worker actual:</strong> No hay en este build${window.__catalogBootState?.serviceWorkerUnregistered?' · anterior desregistrado':''}</div>
         <div><strong>Último error Supabase:</strong> ${catalogLoadError||'—'}</div>
         <div><strong>Última sincronización:</strong> ${catalogLastSyncAt||'—'}</div>
@@ -8853,13 +9029,7 @@ if(config.webappUrl){loadFromSheets();}
       showToast('No tenés permiso para esta acción');
       return false;
     }
-    ['cats','menu','ventas','reservas','gastos',CATALOG_BACKUP_KEY].forEach(key=>localStorage.removeItem(key));
-    localStorage.setItem(APP_DATA_VERSION_KEY,APP_DATA_VERSION);
-    cats=[];
-    menu=[];
-    window.__coloLocalCacheCleared={reason:'manual',at:new Date().toISOString()};
-    updateCatalogBootState({state:'syncing',source:'pending',fallbackReason:'',localCacheCleared:true,localCacheClearedReason:'manual',localCategories:0,localProducts:0});
-    refreshCatalogUi();
+    updateCatalogBootState({state:'syncing',source:'pending',fallbackReason:''});
     const ok=await window.loadCatalogFromSupabase?.({silent:true});
     if(ok) showToast('Datos actualizados.');
     else showToast('No pudimos actualizar los datos. Reintentá en unos segundos.');
@@ -9001,7 +9171,7 @@ if(config.webappUrl){loadFromSheets();}
     };
   }
   const _deleteCat=window.deleteCat;
-  if(typeof _deleteCat==='function'){
+  if(typeof _deleteCat==='function'&&!_deleteCat.__remoteFirst){
     window.deleteCat=function(i,...args){
       const cat=cats[i]?{...cats[i]}:null;
       const before=cats.length;
@@ -9033,7 +9203,7 @@ if(config.webappUrl){loadFromSheets();}
     };
   }
   const _pedirEliminarProducto=window.pedirEliminarProducto;
-  if(typeof _pedirEliminarProducto==='function'){
+  if(typeof _pedirEliminarProducto==='function'&&!_pedirEliminarProducto.__remoteFirst){
     window.pedirEliminarProducto=function(id,...args){
       const product=menu.find(p=>String(p.id)===String(id));
       const res=_pedirEliminarProducto.call(this,id,...args);
@@ -9046,7 +9216,7 @@ if(config.webappUrl){loadFromSheets();}
     };
   }
   const _pedirEliminarProductoInline=window.pedirEliminarProductoInline;
-  if(typeof _pedirEliminarProductoInline==='function'){
+  if(typeof _pedirEliminarProductoInline==='function'&&!_pedirEliminarProductoInline.__remoteFirst){
     window.pedirEliminarProductoInline=function(id,...args){
       const product=menu.find(p=>String(p.id)===String(id));
       const res=_pedirEliminarProductoInline.call(this,id,...args);
@@ -9187,7 +9357,9 @@ if(config.webappUrl){loadFromSheets();}
       preferencias: row.preferences || '',
       nota: row.notes || '',
       total_visits: Number(row.total_visits)||0,
-      visitas: Array.from({length:Number(row.total_visits)||0},()=>null)
+      visitas: Array.from({length:Number(row.total_visits)||0},()=>null),
+      _sync_status:'confirmed',
+      _sync_error:''
     };
   }
   function mapCustomerToSupabase(customer,storeId,existingRow){
@@ -9408,12 +9580,16 @@ if(config.webappUrl){loadFromSheets();}
       const rows=customerRowsOverride || diag.customers;
       if(!rows.length){
         if(!silent) showToast('No hay clientes registrados todavía.');
+        clientes=mergeRemoteRecordsWithLocalPending([],clientes);
+        save();renderClientesTab();
         setCrState('local');
         renderCrSupabaseUi();
         return false;
       }
       if(!Array.isArray(rows)) return false;
-      clientes=[...rows].map(mapCustomerFromSupabase).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+      const remoteCustomers=[...rows].map(mapCustomerFromSupabase);
+      clientes=mergeRemoteRecordsWithLocalPending(remoteCustomers,clientes)
+        .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
       save();
       renderClientesTab();
       renderCrSupabaseUi();
@@ -9545,10 +9721,15 @@ if(config.webappUrl){loadFromSheets();}
       customer._sb_id=res.data.id;
       customer.legacy_id=res.data.legacy_id||customer.legacy_id||(!isValidUuid(String(customer.id||''))?String(customer.id):null);
       customer.total_visits=Number(res.data.total_visits)||customerVisitCount(customer);
+      customer._sync_status='confirmed';
+      customer._sync_error='';
       save();
       return res.data;
     }catch(err){
       logCrWriteError('customer',{operation:existingRow?'update':'insert',payload,storeId,localEntity:{...customer},existingRow},err);
+      customer._sync_status='error';
+      customer._sync_error=err?.message||String(err);
+      save();
       throw err;
     }
   };
@@ -9644,6 +9825,9 @@ if(config.webappUrl){loadFromSheets();}
       const policyHint=inferReservationRlsPolicyMessage(operation,err);
       logCrWriteError('reservation',{operation,payload,storeId,localEntity:{...reservation},existingRow},err);
       if(policyHint) console.error('[Reservations policy hint]',policyHint);
+      reservation._sync_status='error';
+      reservation._sync_error=err?.message||String(err);
+      save();
       throw err;
     }
   };
@@ -10062,14 +10246,28 @@ if(config.webappUrl){loadFromSheets();}
       const wasEdit=!!editClienteId;
       const beforeIds=new Set(clientes.map(c=>String(c.id)));
       const targetId=editClienteId;
-      const res=_guardarClienteCr.apply(this,args);
+      window.__customerRemoteGuardActive=true;
+      let res=null;
+      try{
+        res=_guardarClienteCr.apply(this,args);
+      }finally{
+        window.__customerRemoteGuardActive=false;
+      }
       const customer=wasEdit ? clientes.find(c=>sameId(c.id,targetId)) : clientes.find(c=>!beforeIds.has(String(c.id)));
+      if(customer){
+        customer._sync_status='pending';
+        customer._sync_error='';
+        save();
+      }
       if(customer && hasCrSupabaseReady()){
         try{
           await saveCustomerToSupabase(customer);
-          showToast('✓ Cliente guardado');
+          showToast('Cliente guardado.');
         }catch(err){
           const msg=getSupabaseErrorMessage(err);
+          customer._sync_status='error';
+          customer._sync_error=msg;
+          save();
           setCrState('error',msg);
           console.error('[guardarCliente -> saveCustomerToSupabase failed]',{
             customer:{...customer},
@@ -10080,12 +10278,14 @@ if(config.webappUrl){loadFromSheets();}
           });
           showToast('Cliente guardado. Se actualizará cuando vuelva la conexión.');
         }
+      }else if(customer){
+        showToast('Cliente guardado en este dispositivo. Pendiente de sincronizar.');
       }
       return res;
     };
   }
   const _pedirEliminarClienteCr=window.pedirEliminarCliente;
-  if(typeof _pedirEliminarClienteCr==='function'){
+  if(typeof _pedirEliminarClienteCr==='function'&&!_pedirEliminarClienteCr.__remoteFirst){
     window.pedirEliminarCliente=function(id,...args){
       const customer=clientes.find(c=>sameId(c.id,id));
       const res=_pedirEliminarClienteCr.call(this,id,...args);
@@ -10100,7 +10300,6 @@ if(config.webappUrl){loadFromSheets();}
   const _guardarReservaCr=window.guardarReserva;
   if(typeof _guardarReservaCr==='function'){
     window.guardarReserva=async function(...args){
-      const before=cloneReservasState();
       const wasEdit=!!editReservaId;
       const beforeIds=new Set(reservas.map(r=>String(r.id)));
       const targetId=editReservaId;
@@ -10126,8 +10325,10 @@ if(config.webappUrl){loadFromSheets();}
       if(!res) return res;
       const reservation=wasEdit ? reservas.find(r=>sameId(r.id,targetId)) : reservas.find(r=>!beforeIds.has(String(r.id)));
       if(reservation){
+        reservation._sync_status='pending';
+        reservation._sync_error='';
         markReservationPending(reservation,wasEdit?'edit':'create');
-        renderReservasSection();
+        save();renderReservasSection();
       }
       if(reservation){
         try{
@@ -10146,8 +10347,11 @@ if(config.webappUrl){loadFromSheets();}
           }
         }catch(err){
           if(reservation)clearReservationPending(reservation);
-          reservas=before;
-          save();renderReservasSection();
+          if(reservation){
+            reservation._sync_status='error';
+            reservation._sync_error=err?.message||String(err);
+          }
+          save();cerrarModalReserva();renderReservasSection();renderCajaPendingBanner();
           const msg=getSupabaseErrorMessage(err);
           setCrState('error',msg);
           console.error('[guardarReserva -> saveReservationToSupabase failed]',{
@@ -10157,8 +10361,8 @@ if(config.webappUrl){loadFromSheets();}
             details:err?.details||'',
             hint:err?.hint||''
           });
-          showToast('No pudimos guardar la reserva. Revisá la conexión y reintentá.');
-          return null;
+          showToast('Reserva guardada en este dispositivo. Pendiente de sincronizar.');
+          return reservation;
         }
       }
       return res;
@@ -10438,7 +10642,7 @@ if(config.webappUrl){loadFromSheets();}
       }
       const rows=expenseRowsOverride || diag.rows;
       if(!Array.isArray(rows) || !rows.length){
-        gastos=[];
+        gastos=mergeRemoteRecordsWithLocalPending([],gastos);
         save();
         refreshExpensesUi();
         if(!silent) showToast('No hay gastos para este período.');
@@ -10448,7 +10652,9 @@ if(config.webappUrl){loadFromSheets();}
         renderExpensesSupabaseUi();
         return true;
       }
-      gastos=[...rows].map(mapExpenseFromSupabase).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')) || String(b.hora||'').localeCompare(String(a.hora||'')));
+      const remoteExpenses=[...rows].map(mapExpenseFromSupabase);
+      gastos=mergeRemoteRecordsWithLocalPending(remoteExpenses,gastos)
+        .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')) || String(b.hora||'').localeCompare(String(a.hora||'')));
       save();
       refreshExpensesUi();
       setExpensesState('supabase');
