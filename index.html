@@ -2437,7 +2437,7 @@ const DEFAULT_MENU=[
   {id:32,name:'Yogurt',           price:5000, cat:'beb',    stock:15, ilimitado:false, variantes:[]},
 ];
 
-const APP_VERSION='2026-07-22-mesa-open-flow-fix';
+const APP_VERSION='2026-07-22-pending-banner-grace';
 const APP_DATA_VERSION='2026-04-30-supabase-v1';
 const APP_DATA_VERSION_KEY='colo_app_data_version';
 const CATALOG_BACKUP_KEY='colo_catalog_backup';
@@ -2491,9 +2491,12 @@ let operadores= JSON.parse(localStorage.getItem('operadores')||'[]');
 const PENDING_OPEN_ORDER_CLOSURES_KEY='pending_open_order_closures';
 const PENDING_SHIFT_CLOSURES_KEY='pending_shift_closures';
 const PENDING_OPEN_ORDER_ITEM_SYNCS_KEY='pending_open_order_item_syncs';
+const OPEN_ORDER_BANNER_GRACE_MS=5000;
+const OPEN_ORDER_BANNER_URGENT_MS=15000;
 let pendingOpenOrderClosures=safeJsonParse(localStorage.getItem(PENDING_OPEN_ORDER_CLOSURES_KEY),[]);
 let pendingShiftClosures=safeJsonParse(localStorage.getItem(PENDING_SHIFT_CLOSURES_KEY),[]);
 let pendingOpenOrderItemSyncs=safeJsonParse(localStorage.getItem(PENDING_OPEN_ORDER_ITEM_SYNCS_KEY),[]);
+let cajaPendingBannerTimer=null;
 if(!Array.isArray(pendingOpenOrderClosures))pendingOpenOrderClosures=[];
 if(!Array.isArray(pendingShiftClosures))pendingShiftClosures=[];
 if(!Array.isArray(pendingOpenOrderItemSyncs))pendingOpenOrderItemSyncs=[];
@@ -3796,6 +3799,10 @@ function getPersistenceStatusInfo(record,{localWhenNoRemoteId=false,showConfirme
   if(raw==='confirmed'||raw==='synced'||raw==='remote_confirmed') return {cls:'ok',label:'Confirmado',help:'Actualizado.'};
   if(raw==='close_pending') return {cls:'pending',label:'Cierre pendiente',help:'Venta cobrada. Cierre de mesa pendiente.'};
   if(raw==='error'||raw==='failed'||raw==='sync_error'||raw==='partial_error') return {cls:'error',label:'Error al sincronizar',help:'Reintentar'};
+  const syncStartedAt=Date.parse(record._sync_started_at||'');
+  const syncAge=Number.isFinite(syncStartedAt)?Math.max(0,Date.now()-syncStartedAt):Infinity;
+  const openOrdersReady=window.getOpenOrdersSyncState?.()?.ready;
+  if(record._syncing&&syncAge<OPEN_ORDER_BANNER_URGENT_MS&&navigator.onLine!==false&&openOrdersReady!==false)return null;
   if(raw==='pending'||raw==='pending_local'||record._syncing) return {cls:'pending',label:'Pendiente de sincronizar',help:'No cierres la app hasta que se sincronice.'};
   if(localWhenNoRemoteId && !record._sb_id) return {cls:'pending',label:'Pendiente de sincronizar',help:'No cierres la app hasta que se sincronice.'};
   if(showConfirmed && record._sb_id) return {cls:'ok',label:'Confirmado',help:'Actualizado.'};
@@ -3845,15 +3852,69 @@ function getCajaPendingOperationsCount(){
   const shiftClosures=(pendingShiftClosures||[]).filter(x=>x&&x.status!=='synced').length;
   return sales+expenses+reservations+tables+closures+itemSyncs+shiftOpen+shiftClosures;
 }
+function getCajaPendingOperationsForBanner(){
+  if(typeof window.getPendingOperationsOutbox==='function')return window.getPendingOperationsOutbox();
+  return Array.from({length:getCajaPendingOperationsCount()},()=>({type:'unknown',operation:'pending',status:'pending'}));
+}
+function getCajaPendingBannerState(now=Date.now()){
+  const state={hidden:[],slow:[],pending:[],errors:[],nextRefreshMs:0};
+  const transientOperations=new Set(['create_open_order','sync_open_order_items','replace_open_order_items']);
+  const openOrdersReady=window.getOpenOrdersSyncState?.()?.ready;
+  getCajaPendingOperationsForBanner().forEach(operation=>{
+    const status=String(operation?.status||'pending').toLowerCase();
+    const isError=['error','failed','sync_error','partial_error'].includes(status)||!!operation?.last_error;
+    if(isError){state.errors.push(operation);return;}
+    const isTransientOpenOrder=operation?.type==='mesa'&&transientOperations.has(String(operation?.operation||''));
+    const createdAt=Date.parse(operation?.created_at||'');
+    if(!isTransientOpenOrder||navigator.onLine===false||openOrdersReady===false||!Number.isFinite(createdAt)){
+      state.pending.push(operation);
+      return;
+    }
+    const age=Math.max(0,now-createdAt);
+    if(age<OPEN_ORDER_BANNER_GRACE_MS){
+      state.hidden.push(operation);
+      const wait=OPEN_ORDER_BANNER_GRACE_MS-age;
+      state.nextRefreshMs=state.nextRefreshMs?Math.min(state.nextRefreshMs,wait):wait;
+    }else if(age<OPEN_ORDER_BANNER_URGENT_MS){
+      state.slow.push(operation);
+      const wait=OPEN_ORDER_BANNER_URGENT_MS-age;
+      state.nextRefreshMs=state.nextRefreshMs?Math.min(state.nextRefreshMs,wait):wait;
+    }else{
+      state.pending.push(operation);
+    }
+  });
+  return state;
+}
 function renderCajaPendingBanner(){
   const el=$('caja-pending-banner');if(!el)return;
-  const count=getCajaPendingOperationsCount();
+  clearTimeout(cajaPendingBannerTimer);
+  cajaPendingBannerTimer=null;
+  const state=getCajaPendingBannerState();
+  if(state.nextRefreshMs>0){
+    cajaPendingBannerTimer=setTimeout(()=>{
+      renderCajaPendingBanner();
+      renderMesasSection();
+    },Math.max(50,state.nextRefreshMs+25));
+  }
   const clockBad=new Date().getTimezoneOffset()!==180;
-  if(!count&&!clockBad){el.classList.remove('show');el.innerHTML='';return;}
+  const errorCount=state.errors.length;
+  const pendingCount=state.pending.length;
+  const slowCount=state.slow.length;
+  if(!errorCount&&!pendingCount&&!slowCount&&!clockBad){el.classList.remove('show');el.innerHTML='';return;}
   el.classList.add('show');
-  const pendingText=count?`<strong>${count} operación${count===1?'':'es'} pendiente${count===1?'':'s'}.</strong><br>No cierres la app hasta que se sincronice. Podés reintentar ahora.`:'';
-  const clockText=clockBad?`${count?'<br>':''}<strong>Revisá la hora del dispositivo.</strong><br>Puede afectar ventas y reservas.`:'';
-  el.innerHTML=`<div class="pending-ops-text">${pendingText}${clockText}</div>${count?`<button class="btn-sm" type="button" onclick="retryCajaPendingOperations()">Reintentar</button>`:''}`;
+  let pendingText='';
+  let showRetry=false;
+  if(errorCount){
+    pendingText=`<strong>No pudimos sincronizar ${errorCount} operación${errorCount===1?'':'es'}.</strong><br>Reintentá.`;
+    showRetry=true;
+  }else if(pendingCount){
+    pendingText=`<strong>${pendingCount} operación${pendingCount===1?'':'es'} pendiente${pendingCount===1?'':'s'}.</strong><br>No cierres la app hasta que se sincronice.`;
+    showRetry=true;
+  }else if(slowCount){
+    pendingText=`<strong>Estamos terminando de sincronizar ${slowCount} operación${slowCount===1?'':'es'}.</strong>`;
+  }
+  const clockText=clockBad?`${pendingText?'<br>':''}<strong>Revisá la hora del dispositivo.</strong><br>Puede afectar ventas y reservas.`:'';
+  el.innerHTML=`<div class="pending-ops-text">${pendingText}${clockText}</div>${showRetry?`<button class="btn-sm" type="button" onclick="retryCajaPendingOperations()">Reintentar</button>`:''}`;
 }
 async function retryCajaPendingOperations(){
   const openOrdersTask=window.retryPendingOpenOrderWrites?.({reason:'manual'});
@@ -4107,7 +4168,7 @@ function renderMesaSetupCarrito(){
 async function confirmarNuevaMesa(){
   const nombre=$('nueva-mesa-input').value.trim();if(!nombre){showToast('Agregá un nombre o identificación.');return;}
   const localId='m_'+Date.now();
-  const m={id:localId,legacy_local_id:localId,nombre,tipo:tipoNuevaMesa,items:{...mesaSetupCarrito},nota:($('mesa-nota')?.value||'').trim(),pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null,open_order_id:null,status:'open',_syncing:true};
+  const m={id:localId,legacy_local_id:localId,nombre,tipo:tipoNuevaMesa,items:{...mesaSetupCarrito},nota:($('mesa-nota')?.value||'').trim(),pago:'ef',payment_mode:'single',pagos:[],apertura:nowISO(),_sb_id:null,open_order_id:null,status:'open',_syncing:true,_sync_started_at:new Date().toISOString()};
   window.markOpenOrderLocalCreate?.(m.id);
   const mesasBeforeCreate=[...(mesas||[])];
   try{
@@ -6294,10 +6355,10 @@ if(config.webappUrl){loadFromSheets();}
     const pendingMesaKeys=new Set();
     (mesas||[]).filter(m=>m&&((!m._sb_id)||m._syncing||m._sync_status==='partial_error')).forEach(m=>{
       [m.id,m._sb_id,m.open_order_id,m.legacy_local_id].map(v=>String(v||'')).filter(Boolean).forEach(key=>pendingMesaKeys.add(key));
-      ops.push({type:'mesa',operation:m._sb_id?'sync_open_order_items':'create_open_order',status:m._sync_status||'pending',label:m.nombre||'Mesa',idempotency_key:`open_order:${m.legacy_local_id||m.id}`,attempts:0,last_error:m._sync_error||m._lastSyncError||'',payload:{id:m.id,_sb_id:m._sb_id,items:Object.keys(m.items||{}).length}});
+      ops.push({type:'mesa',operation:m._sb_id?'sync_open_order_items':'create_open_order',status:m._sync_status||'pending',created_at:m._sync_started_at||m.apertura||'',label:m.nombre||'Mesa',idempotency_key:`open_order:${m.legacy_local_id||m.id}`,attempts:0,last_error:m._sync_error||m._lastSyncError||'',payload:{id:m.id,_sb_id:m._sb_id,items:Object.keys(m.items||{}).length}});
     });
     (pendingOpenOrderClosures||[]).filter(x=>x&&x.status!=='synced').forEach(x=>ops.push({type:'mesa',operation:'close_open_order',status:x.status||'pending',label:x.mesa_snapshot?.nombre||x.open_order_id,idempotency_key:x.idempotency_key||'',attempts:x.attempts||0,last_error:x.last_error||'',payload:x}));
-    (pendingOpenOrderItemSyncs||[]).filter(x=>x&&x.status!=='synced'&&!pendingMesaKeys.has(String(x.open_order_id||''))).forEach(x=>ops.push({type:'mesa',operation:'replace_open_order_items',status:x.status||'pending',label:x.open_order_id,idempotency_key:x.idempotency_key||'',attempts:x.attempts||0,last_error:x.last_error||'',payload:{open_order_id:x.open_order_id,rows:(x.payload||[]).length}}));
+    (pendingOpenOrderItemSyncs||[]).filter(x=>x&&x.status!=='synced'&&!pendingMesaKeys.has(String(x.open_order_id||''))).forEach(x=>ops.push({type:'mesa',operation:'replace_open_order_items',status:x.status||'pending',created_at:x.created_at||'',label:x.open_order_id,idempotency_key:x.idempotency_key||'',attempts:x.attempts||0,last_error:x.last_error||'',payload:{open_order_id:x.open_order_id,rows:(x.payload||[]).length}}));
     (reservas||[]).filter(r=>{const info=getPersistenceStatusInfo(r,{localWhenNoRemoteId:true});return info&&info.cls!=='ok';}).forEach(r=>ops.push({type:'reserva',operation:'save_reservation',status:r._sync_status||(!r._sb_id?'pending':'error'),label:r.nombre||'Reserva',idempotency_key:`reservation:${r.legacy_id||r.id}`,attempts:0,last_error:r._sync_error||'',payload:{id:r.id,_sb_id:r._sb_id,total:getReservationTotal?.(r.items||[])||0}}));
     (gastos||[]).filter(g=>{const info=getPersistenceStatusInfo(g,{localWhenNoRemoteId:true});return info&&info.cls!=='ok';}).forEach(g=>ops.push({type:'gasto',operation:'save_expense',status:g._sync_status||(!g._sb_id?'pending':'error'),label:g.desc||'Gasto',idempotency_key:`expense:${g.legacy_id||g.id}`,attempts:0,last_error:g._sync_error||'',payload:{id:g.id,_sb_id:g._sb_id,monto:g.monto}}));
     if(turno&&turno.abierto&&(!turno._sb_id||turno._sync_status==='pending'||turno._sync_status==='error')){
@@ -7465,7 +7526,7 @@ if(config.webappUrl){loadFromSheets();}
   }
 
   // ── Sync items: mesa.items → open_order_items ─────
-  async function syncOpenOrderItems(sbOrderId,items,storeId){
+  async function syncOpenOrderItems(sbOrderId,items,storeId,syncStartedAt=''){
     const client=ooClient();
     if(!client||!sbOrderId)return false;
     const rows=Object.values(items||{}).map((item,i)=>{
@@ -7492,6 +7553,7 @@ if(config.webappUrl){loadFromSheets();}
     upsertPendingOpenOrderItemSync({
       type:'open_order_items_replace',
       status:'pending',
+      created_at:syncStartedAt||undefined,
       open_order_id:sbOrderId,
       store_id:storeId,
       payload:rows,
@@ -7519,6 +7581,7 @@ if(config.webappUrl){loadFromSheets();}
       const entry=upsertPendingOpenOrderItemSync({
         type:'open_order_items_replace',
         status:'partial_error',
+        created_at:syncStartedAt||undefined,
         open_order_id:sbOrderId,
         store_id:storeId,
         payload:rows,
@@ -7540,6 +7603,7 @@ if(config.webappUrl){loadFromSheets();}
 
   // ── Full sync de una mesa (create if needed + items) ─
   async function syncMesaToSupabase(mesa){
+    if(!mesa._sync_started_at)mesa._sync_started_at=new Date().toISOString();
     if(!ooReady()){
       const ready=await waitForOOReady(4000);
       if(!ready)return false;
@@ -7565,13 +7629,18 @@ if(config.webappUrl){loadFromSheets();}
     }
     if(!mesa._sb_id)return false;
     const headerOk=await updateOpenOrderHeaderInSupabase(mesa,storeId);
-    const itemsOk=await syncOpenOrderItems(mesa._sb_id,mesa.items||{},storeId);
+    const itemsOk=await syncOpenOrderItems(mesa._sb_id,mesa.items||{},storeId,mesa._sync_started_at);
     const ok=headerOk&&itemsOk;
     mesa._syncing=!ok;
     mesa._sync_status=ok?'confirmed':'partial_error';
     mesa._sync_error=ok?'':'No pudimos actualizar todos los ítems de la mesa';
+    if(ok)delete mesa._sync_started_at;
     const idx=(mesas||[]).findIndex(m=>[m.id,m._sb_id,m.open_order_id,m.legacy_local_id].some(v=>String(v||'')===String(mesa.id)||String(v||'')===String(mesa._sb_id)||String(v||'')===String(previousId)));
-    if(idx>=0){mesas[idx]._syncing=!ok;mesas[idx]._sync_status=mesa._sync_status;mesas[idx]._sync_error=mesa._sync_error;}
+    if(idx>=0){
+      mesas[idx]._syncing=!ok;mesas[idx]._sync_status=mesa._sync_status;mesas[idx]._sync_error=mesa._sync_error;
+      if(ok)delete mesas[idx]._sync_started_at;
+      else mesas[idx]._sync_started_at=mesa._sync_started_at;
+    }
     if(typeof window.save==='function')window.save();
     return ok;
   }
@@ -8042,7 +8111,7 @@ if(config.webappUrl){loadFromSheets();}
         }
         clearPendingOpenOrderItemSync(entry.open_order_id);
         const idx=findMesaIndexByAnyId(entry.open_order_id);
-        if(idx>=0){mesas[idx]._syncing=false;mesas[idx]._sync_status='confirmed';mesas[idx]._sync_error='';}
+        if(idx>=0){mesas[idx]._syncing=false;mesas[idx]._sync_status='confirmed';mesas[idx]._sync_error='';delete mesas[idx]._sync_started_at;}
         summary.synced++;
       }catch(err){
         entry.status='partial_error';
