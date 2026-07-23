@@ -49,6 +49,7 @@
   --shadow-md:0 16px 40px rgba(62,43,35,.12);
   --focus:0 0 0 3px rgba(242,112,33,.20);
   --r:14px; --r-sm:8px; --r-xs:6px;
+  --control-h-sm:36px; --control-h:44px;
   --ff-display:'Alfa Slab One',Georgia,serif; --ff-serif:'Sansita',Georgia,serif; --ff:'DM Sans',sans-serif; --ff-mono:'DM Mono',ui-monospace,SFMono-Regular,Consolas,monospace;
   --nav-h:60px; --header-h:58px;
   --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px);
@@ -176,16 +177,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(max-width:767px){.cat-chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.cat-chips::-webkit-scrollbar{display:none}}
 .chip{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border2);background:var(--surf);color:var(--ink2);cursor:pointer;transition:all .15s;user-select:none;white-space:nowrap;flex-shrink:0}
 .chip.active{background:var(--orange);color:#fff;border-color:var(--orange)}
-.chip-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.chip-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:0;vertical-align:middle;flex:0 0 auto}
 
 /* ── PRODUCT GRID ── */
 .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:8px;margin-bottom:14px}
-.prod-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px;cursor:pointer;transition:all .12s;position:relative;user-select:none;box-shadow:var(--shadow-sm)}
+.prod-card{appearance:none;width:100%;background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px;color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease;position:relative;user-select:none;box-shadow:var(--shadow-sm)}
 .prod-card:active{transform:scale(.96)}
 .prod-card.in-cart{border-color:var(--orange);border-width:1.5px}
 .prod-card.disabled{opacity:.38;pointer-events:none}
 .prod-card.low-stock{border-color:var(--amber)}
-.cat-dot{width:6px;height:6px;border-radius:50%;margin-bottom:8px}
+.cat-dot{display:block;width:6px;height:6px;border-radius:50%;margin-bottom:8px}
 .prod-name{font-size:13px;font-weight:500;color:var(--ink);line-height:1.3;margin-bottom:3px}
 .prod-price{font-size:12px;color:var(--ink2)}
 .prod-mods-hint{font-size:10px;color:var(--ink3);margin-top:3px}
@@ -459,7 +460,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .mesa-close{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;border:1px solid var(--border2);background:var(--surf2);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink3);cursor:pointer;transition:all .12s}
 .mesa-close:hover{background:var(--red-bg);color:var(--red);border-color:rgba(176,48,48,.3)}
 .tipo-btns{display:flex;gap:6px;margin-bottom:14px;justify-content:center}
-.tipo-btn{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1.5px solid var(--border2);background:var(--surf);cursor:pointer;transition:all .15s;user-select:none}
+.tipo-btn{min-width:112px;padding:7px 14px;border-radius:var(--r-sm);font-size:12px;font-weight:500;border:1px solid var(--border2);background:var(--surf);color:var(--ink2);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease;user-select:none}
 .tipo-btn.sel-salon{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
 .tipo-btn.sel-delivery{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
 .tipo-btn.sel-takeaway{background:var(--green-bg);border-color:var(--green);color:var(--green)}
@@ -493,7 +494,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
 .btn-cancel{padding:11px;border:1px solid var(--border2);border-radius:var(--r-sm);background:var(--surf2);font-family:var(--ff);font-size:14px;color:var(--ink2);cursor:pointer}
 .btn-save{padding:11px;background:var(--orange);color:#fff;border:none;border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;font-weight:500;cursor:pointer}
-.modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;border:1px solid var(--border2);border-radius:var(--r-xs);background:var(--surf2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--ink3)}
+.modal-close{position:absolute;top:16px;right:16px;width:36px;height:36px;padding:0;border:1px solid var(--border2);border-radius:var(--r-xs);background:var(--surf2);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;color:var(--ink3)}
 .modal-box{position:relative}
 
 /* ── MODS SELECTOR (en carrito) ── */
@@ -627,7 +628,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .order-modal-footer{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:10px;padding:14px 30px 18px;border-top:1px solid var(--border);background:rgba(255,252,248,.96)}
 .order-modal-footer .btn-cancel,.order-modal-footer .btn-save{min-width:150px}
 .mesa-setup-box .order-modal-footer{grid-template-columns:1fr auto auto}
-@media(max-width:900px){
+@media(max-width:767px){
   .reserva-modal-box{max-height:94vh}
   .order-modal-shell{height:min(94dvh,820px);max-height:calc(100dvh - 12px)}
   .reserva-modal-head{padding:18px 56px 8px 18px}
@@ -939,18 +940,29 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 html{background:var(--bg);color-scheme:light}
 [data-theme="dark"]{color-scheme:dark}
 body{overflow-x:hidden}
+body:has(#modal-nueva-mesa.open),body:has(#modal-reserva.open){overflow:hidden}
 button,input,select,textarea{font:inherit}
 button:disabled,.btn-sm:disabled,.btn:disabled,.btn-save:disabled,.btn-cancel:disabled,.btn-cfg:disabled,.btn-confirmar:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none}
 
-.btn-sm,.btn,.btn-cfg,.btn-cancel,.btn-save,.btn-confirmar,.pago-opt,.tipo-btn,.chip,.dash-filtro-chip,.subtab-btn,.inner-tab-btn{
-  min-height:38px;border-radius:var(--r-sm);line-height:1.15;text-decoration:none
+.btn-sm,.btn,.btn-cfg,.btn-cancel,.btn-save,.btn-confirmar,.pago-opt,.tipo-btn,.chip,.dash-filtro-chip,.subtab-btn,.inner-tab-btn,.qty-btn,.modal-close{
+  box-sizing:border-box;border-radius:var(--r-sm);line-height:1.2;text-decoration:none;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease,filter .15s ease,opacity .15s ease
 }
-.btn-sm,.btn,.btn-cancel,.btn-save,.btn-cfg,.btn-confirmar{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn-sm,.btn,.btn-cancel,.btn-save,.btn-cfg,.btn-confirmar,.pago-opt,.tipo-btn,.chip,.dash-filtro-chip,.subtab-btn,.inner-tab-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px
+}
+.btn-sm{min-height:38px}
+.btn,.btn-cancel,.btn-save,.btn-cfg,.btn-confirmar{min-height:var(--control-h)}
+.pago-opt,.tipo-btn,.subtab-btn,.inner-tab-btn{min-height:40px}
+.chip,.dash-filtro-chip{min-height:var(--control-h-sm)}
+.qty-btn,.modal-close,.theme-toggle{display:inline-grid;place-items:center;flex:0 0 auto;line-height:1}
 .btn-sm,.btn,.btn-cancel,.btn-save,.btn-cfg{font-weight:700}
 .btn-sm.primary,.btn-save,.btn.alt,.btn-cfg,.btn-confirmar{box-shadow:0 8px 18px rgba(185,76,30,.14)}
 .btn-sm.primary:hover,.btn-save:hover,.btn.alt:hover,.btn-cfg:hover,.btn-confirmar:hover{filter:saturate(1.04) brightness(.99)}
 .btn-cancel,.btn.ghost,.btn-sm:not(.primary){background:var(--surf);border-color:var(--border2)}
 .btn-cancel:hover,.btn.ghost:hover,.btn-sm:not(.primary):hover{background:var(--surf2)}
+.btn:hover,.btn:active{transform:none}
+.tipo-btn:hover,.chip:hover,.dash-filtro-chip:hover,.pago-opt:hover{background:var(--surf2);border-color:rgba(242,112,33,.45)}
 
 .chart-card,.carrito-wrap,.cfg-card,.accordion-item,.hist-item,.resultado-card,.seccion-card,.kpi,.mesa-card,.reserva-card,.gasto-row,.cliente-row,.auth-card,.prod-card,.settings-note,.pending-ops-banner{
   border-radius:var(--r-sm);border-color:var(--border);box-shadow:var(--shadow-sm)
@@ -1208,24 +1220,24 @@ body{
 .order-modal-shell,.reserva-modal-box{
   width:min(1280px,calc(100vw - 28px))!important;
   max-width:min(1280px,calc(100vw - 28px))!important;
-  height:min(92dvh,860px);
-  max-height:calc(100dvh - 28px);
+  height:min(94dvh,860px);
+  max-height:calc(100dvh - 24px);
   grid-template-rows:auto auto minmax(0,1fr) auto;
 }
 .order-modal-header,.reserva-modal-head{
-  min-height:56px;padding:18px 64px 10px 24px;border-bottom:1px solid rgba(62,43,35,.08)
+  min-height:52px;padding:14px 64px 8px 20px;border-bottom:1px solid rgba(62,43,35,.08)
 }
 .order-modal-header .modal-title,.reserva-modal-head .modal-title{font-size:clamp(24px,2.4vw,34px)}
 .order-modal-service,.reserva-service-row{
-  padding:10px 24px 12px;background:rgba(247,229,205,.38);border-bottom:1px solid var(--border)
+  padding:8px 20px 10px;background:rgba(247,229,205,.38);border-bottom:1px solid var(--border)
 }
 [data-theme="dark"] .order-modal-service,[data-theme="dark"] .reserva-service-row{background:rgba(62,43,35,.34)}
 .order-modal-service .tipo-btns,.reserva-service-row .tipo-btns{gap:8px}
-.order-modal-service .tipo-btn,.reserva-service-row .tipo-btn{min-height:40px;padding:9px 16px}
+.order-modal-service .tipo-btn,.reserva-service-row .tipo-btn{min-height:var(--control-h);padding:10px 16px;line-height:1.15}
 
 .order-modal-body,.reserva-modal-body{
   grid-template-columns:minmax(620px,1fr) minmax(330px,380px);
-  gap:18px;padding:18px 24px;overflow:hidden
+  gap:16px;padding:14px 20px;overflow:hidden
 }
 .order-modal-main,.reserva-main-col{min-width:0;gap:12px}
 .order-modal-side,.reserva-side-col{
@@ -1259,13 +1271,13 @@ body{
 .order-product-tools .chip,.reserva-products-tools .chip{min-height:36px;padding:8px 12px}
 .order-product-grid-scroll,.reserva-products-scroll{
   flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;
-  padding:0 2px 10px 0;scrollbar-gutter:stable
+  padding:12px 10px 16px;scrollbar-gutter:stable;box-sizing:border-box
 }
 .order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{
   grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;align-content:start
 }
 .order-modal-shell .prod-card,.reserva-modal-box .prod-card{
-  min-height:68px;padding:9px 10px;border-width:1.25px;display:flex;flex-direction:column;justify-content:flex-start
+  min-height:68px;padding:9px 10px;border-width:1px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:flex-start;transform:none
 }
 .order-modal-shell .prod-card:not(.in-cart)::after,.reserva-modal-box .prod-card:not(.in-cart)::after{
   content:'+';position:absolute;right:8px;bottom:8px;width:20px;height:20px;border-radius:999px;
@@ -1273,7 +1285,14 @@ body{
   font:700 14px/1 var(--ff);opacity:.92
 }
 .order-modal-shell .prod-card.in-cart,.reserva-modal-box .prod-card.in-cart{
-  background:rgba(242,112,33,.10);border-color:var(--brand-primary)
+  background:rgba(242,112,33,.10);border-color:var(--brand-primary);box-shadow:0 0 0 1px var(--brand-primary),var(--shadow-sm);transform:none
+}
+.order-modal-shell .prod-card:hover,.order-modal-shell .prod-card:active,.order-modal-shell .prod-card:focus-visible,
+.reserva-modal-box .prod-card:hover,.reserva-modal-box .prod-card:active,.reserva-modal-box .prod-card:focus-visible{
+  border-color:var(--brand-primary);box-shadow:0 0 0 1px var(--brand-primary),var(--shadow-sm);transform:none
+}
+.order-modal-shell .prod-card:focus-visible,.reserva-modal-box .prod-card:focus-visible{
+  outline:2px solid rgba(242,112,33,.58);outline-offset:2px
 }
 .order-modal-shell .prod-card .cat-dot,.reserva-modal-box .prod-card .cat-dot{margin-bottom:6px}
 .order-modal-shell .prod-name,.reserva-modal-box .prod-name{font-size:12.5px;line-height:1.18}
@@ -1292,6 +1311,9 @@ body{
 .order-items-scroll,.reserva-cart-scroll{
   min-height:120px;max-height:none;overflow:auto;overscroll-behavior:contain;padding-right:4px
 }
+.order-empty-state{padding:14px;border:1px dashed var(--border2);border-radius:var(--r-sm);background:rgba(255,248,234,.42);color:var(--ink3);font-size:13px;line-height:1.45}
+.order-empty-state span{display:block;margin-top:3px;color:var(--ink2)}
+[data-theme="dark"] .order-empty-state{background:rgba(74,51,41,.36)}
 .order-items-scroll .cart-row,.reserva-cart-scroll .cart-row{
   display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;padding:10px 0
 }
@@ -1301,7 +1323,7 @@ body{
 .order-note textarea,.reserva-note textarea{min-height:66px;max-height:100px}
 
 .order-modal-footer,.reserva-modal-footer{
-  min-height:68px;padding:12px 24px calc(12px + var(--safe-bottom));background:rgba(255,241,220,.96);
+  min-height:64px;padding:10px 20px calc(10px + var(--safe-bottom));background:rgba(255,241,220,.96);
   border-top:1px solid var(--border);box-shadow:0 -10px 24px rgba(62,43,35,.08)
 }
 [data-theme="dark"] .order-modal-footer,[data-theme="dark"] .reserva-modal-footer{background:rgba(62,43,35,.96)}
@@ -1309,11 +1331,11 @@ body{
   max-width:260px;min-height:44px
 }
 .order-modal-footer .btn-cancel,.order-modal-footer .btn-save,.reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{
-  min-height:44px
+  min-height:var(--control-h);min-width:160px
 }
 
 @media(min-width:1180px){
-  .order-modal-body,.reserva-modal-body{grid-template-columns:minmax(760px,1fr) 380px}
+  .order-modal-body,.reserva-modal-body{grid-template-columns:minmax(0,1fr) 380px}
   .order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{grid-template-columns:repeat(auto-fill,minmax(138px,1fr))}
 }
 
@@ -1343,7 +1365,13 @@ body{
   [data-theme="dark"] .order-modal-header,[data-theme="dark"] .reserva-modal-head{background:rgba(62,43,35,.98)}
   .order-modal-header .modal-title,.reserva-modal-head .modal-title{font-size:24px;line-height:1}
   .order-modal-service,.reserva-service-row{
-    padding:8px 12px 10px;overflow-x:auto
+    padding:8px 12px 10px;overflow:hidden
+  }
+  .order-modal-service .tipo-btns,.reserva-service-row .tipo-btns{
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;overflow:visible
+  }
+  .order-modal-service .tipo-btn,.reserva-service-row .tipo-btn{
+    width:100%;min-width:0;padding:10px 6px;font-size:11.5px;white-space:nowrap
   }
   .order-modal-body,.reserva-modal-body{
     display:flex;flex-direction:column;gap:12px;padding:12px;overflow:auto;overscroll-behavior:contain
@@ -1356,7 +1384,7 @@ body{
     position:static;margin:0 -10px;padding:0 10px 8px
   }
   .order-product-grid-scroll,.reserva-products-scroll{
-    overflow:visible;padding:0
+    overflow:visible;padding:8px 2px 12px
   }
   .order-modal-shell .prod-grid,.reserva-modal-box .prod-grid{
     grid-template-columns:repeat(2,minmax(0,1fr));gap:8px
@@ -1377,6 +1405,9 @@ body{
     max-width:none;width:100%
   }
   .order-modal-footer .btn-cancel,.order-modal-footer .btn-save,.reserva-modal-footer .btn-cancel,.reserva-modal-footer .btn-save{width:100%}
+  .mesa-setup-box .order-modal-footer{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .mesa-setup-box .order-modal-footer .reserva-footer-total{grid-column:1/-1}
+  .mesa-setup-box .order-modal-footer .btn-cancel,.mesa-setup-box .order-modal-footer .btn-save{min-width:0}
 }
 
 @media(max-width:380px){
@@ -1463,8 +1494,9 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
     max-height:calc(100dvh - 32px)
   }
   .order-modal-shell .prod-card:hover,.reserva-modal-box .prod-card:hover{
-    border-color:rgba(242,112,33,.7);
-    box-shadow:0 8px 18px rgba(62,43,35,.10)
+    border-color:var(--brand-primary);
+    box-shadow:0 0 0 1px var(--brand-primary),0 8px 18px rgba(62,43,35,.10);
+    transform:none
   }
 }
 
@@ -1557,14 +1589,19 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
   .btn-cancel,.btn-save,.btn-confirmar,.modal-actions .btn{
     min-height:52px
   }
-  .order-modal-service .tipo-btns,.reserva-service-row .tipo-btns,
+  .order-modal-service .tipo-btns,.reserva-service-row .tipo-btns{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    width:100%;
+    overflow:visible;
+    padding-bottom:0
+  }
   .order-product-tools .cat-chips,.reserva-products-tools .cat-chips{
     flex-wrap:nowrap;
     overflow-x:auto;
     padding-bottom:3px;
     scrollbar-width:none
   }
-  .order-modal-service .tipo-btns::-webkit-scrollbar,.reserva-service-row .tipo-btns::-webkit-scrollbar,
   .order-product-tools .cat-chips::-webkit-scrollbar,.reserva-products-tools .cat-chips::-webkit-scrollbar{
     display:none
   }
@@ -1575,7 +1612,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
     font-size:22px
   }
   .order-modal-service .tipo-btn,.reserva-service-row .tipo-btn{
-    min-width:112px;
+    min-width:0;
     padding-left:10px;
     padding-right:10px
   }
@@ -1967,7 +2004,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: TURNO -->
 <div class="modal-ov" id="modal-turno" onclick="closeModalTurno(event)">
   <div class="modal-box">
-    <div class="modal-close" onclick="cerrarModalTurno()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalTurno()">×</button>
     <div class="modal-title" id="turno-modal-titulo">Turno</div>
     <div id="turno-modal-body"></div>
   </div>
@@ -1976,15 +2013,15 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: NUEVA MESA -->
 <div class="modal-ov" id="modal-nueva-mesa" onclick="closeModalNuevaMesa(event)">
   <div class="modal-box reserva-modal-box order-modal-shell mesa-setup-box">
-    <div class="modal-close" onclick="cerrarModalNuevaMesa()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalNuevaMesa()">×</button>
     <div class="reserva-modal-head order-modal-header">
       <div class="modal-title">Nueva mesa</div>
     </div>
     <div class="reserva-service-row order-modal-service">
       <div class="tipo-btns">
-        <div class="tipo-btn" id="tipo-btn-salon" onclick="selTipo('salon')">🪑 Salón</div>
-        <div class="tipo-btn" id="tipo-btn-delivery" onclick="selTipo('delivery')">🛵 Delivery</div>
-        <div class="tipo-btn" id="tipo-btn-takeaway" onclick="selTipo('takeaway')">🥡 Take away</div>
+        <button class="tipo-btn" type="button" id="tipo-btn-salon" onclick="selTipo('salon')">🪑 Salón</button>
+        <button class="tipo-btn" type="button" id="tipo-btn-delivery" onclick="selTipo('delivery')">🛵 Delivery</button>
+        <button class="tipo-btn" type="button" id="tipo-btn-takeaway" onclick="selTipo('takeaway')">🥡 Take away</button>
       </div>
     </div>
     <div class="reserva-modal-body order-modal-body">
@@ -2010,7 +2047,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
             <div class="reserva-summary-title order-summary-title">Pedido</div>
           </div>
           <div id="mesa-carrito-wrap" class="reserva-cart-scroll order-items-scroll">
-            <div id="mesa-carrito-empty" style="display:none;font-size:13px;color:var(--ink3);padding:12px 0">Todavía no agregaste productos a la mesa.</div>
+            <div id="mesa-carrito-empty" class="order-empty-state" style="display:none">Todavía no agregaste productos a la mesa.<span>Seleccioná productos desde el panel izquierdo.</span></div>
             <div id="mesa-carrito-rows"></div>
           </div>
           <div class="modal-field reserva-note order-note">
@@ -2027,7 +2064,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: VARIANTES AL AGREGAR PRODUCTO (en carrito) -->
 <div class="modal-ov" id="modal-variantes" onclick="closeModalVariantes(event)">
   <div class="modal-box">
-    <div class="modal-close" onclick="cerrarModalVariantes()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalVariantes()">×</button>
     <div class="modal-title" id="modal-variantes-titulo">Personalizar</div>
     <div id="modal-variantes-grupos"></div>
     <div class="modal-field">
@@ -2048,7 +2085,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: PRODUCTO (con variantes expandibles) -->
 <div class="modal-ov" id="modal-prod" onclick="closeProdModalOutside(event)">
   <div class="modal-box" style="max-width:520px">
-    <div class="modal-close" onclick="closeProdModal()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="closeProdModal()">×</button>
     <div class="modal-title" id="prod-modal-title">Producto</div>
     <div class="modal-field">
       <label class="modal-lbl">Nombre</label>
@@ -2099,7 +2136,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: CLIENTE -->
 <div class="modal-ov" id="modal-cliente" onclick="closeModalCliente(event)">
   <div class="modal-box">
-    <div class="modal-close" onclick="cerrarModalCliente()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalCliente()">×</button>
     <div class="modal-title" id="cliente-modal-titulo">Cliente</div>
     <div class="modal-2col">
       <div class="modal-field">
@@ -2130,15 +2167,15 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: RESERVA (con productos múltiples) -->
 <div class="modal-ov" id="modal-reserva" onclick="closeModalReserva(event)">
   <div class="modal-box reserva-modal-box order-modal-shell">
-    <div class="modal-close" onclick="cerrarModalReserva()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalReserva()">×</button>
     <div class="reserva-modal-head order-modal-header">
       <div class="modal-title" id="reserva-modal-titulo">Reserva</div>
     </div>
     <div class="reserva-service-row order-modal-service">
       <div class="tipo-btns">
-        <div class="tipo-btn" id="rtipo-btn-salon" onclick="selReservaTipo('salon')">🪑 Salón</div>
-        <div class="tipo-btn" id="rtipo-btn-delivery" onclick="selReservaTipo('delivery')">🛵 Delivery</div>
-        <div class="tipo-btn" id="rtipo-btn-takeaway" onclick="selReservaTipo('takeaway')">🥡 Take away</div>
+        <button class="tipo-btn" type="button" id="rtipo-btn-salon" onclick="selReservaTipo('salon')">🪑 Salón</button>
+        <button class="tipo-btn" type="button" id="rtipo-btn-delivery" onclick="selReservaTipo('delivery')">🛵 Delivery</button>
+        <button class="tipo-btn" type="button" id="rtipo-btn-takeaway" onclick="selReservaTipo('takeaway')">🥡 Take away</button>
       </div>
     </div>
     <div class="reserva-modal-body order-modal-body">
@@ -2220,7 +2257,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: NUEVO PRODUCTO (unificado — desde Ajustes y desde pedido) -->
 <div class="modal-ov" id="modal-prod-rapido" onclick="closeModalProdRapido(event)">
   <div class="modal-box" style="max-width:520px">
-    <div class="modal-close" onclick="cerrarModalProdRapido()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalProdRapido()">×</button>
     <div class="modal-title" id="prod-rapido-titulo">Nuevo producto</div>
     <div class="modal-field">
       <label class="modal-lbl">Nombre</label>
@@ -2259,7 +2296,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: NUEVA CATEGORÍA (standalone, reutilizable) -->
 <div class="modal-ov" id="modal-nueva-cat" onclick="closeModalNuevaCat(event)">
   <div class="modal-box" style="max-width:380px">
-    <div class="modal-close" onclick="cerrarModalNuevaCat()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalNuevaCat()">×</button>
     <div class="modal-title">Nueva categoría</div>
     <div class="modal-field">
       <label class="modal-lbl">Nombre</label>
@@ -2293,7 +2330,7 @@ button:focus-visible,.btn:focus-visible,.btn-sm:focus-visible,.chip:focus-visibl
 <!-- MODAL: GASTO -->
 <div class="modal-ov" id="modal-gasto" onclick="closeModalGasto(event)">
   <div class="modal-box gasto-modal-box">
-    <div class="modal-close" onclick="cerrarModalGasto()">×</div>
+    <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModalGasto()">×</button>
     <div class="gasto-modal-head">
       <div>
         <div class="modal-title">Nuevo gasto</div>
@@ -4054,7 +4091,7 @@ function renderSetupProductChips(elId,activeCat,setterName,{reservableOnly=false
   const el=$(elId);if(!el)return;
   const sourceCats=reservableOnly?cats.filter(c=>c.reservable):[...cats];
   const list=[{id:'todos',name:'Todos',color:'#888'},...sourceCats.sort((a,b)=>a.name.localeCompare(b.name,'es'))];
-  el.innerHTML=list.map(c=>`<div class="chip${activeCat===c.id?' active':''}" onclick="${setterName}('${c.id}')">${c.id!=='todos'?`<span class="chip-dot" style="background:${c.color}"></span>`:''}${escapeHtml(c.name)}</div>`).join('');
+  el.innerHTML=list.map(c=>`<button type="button" class="chip${activeCat===c.id?' active':''}" aria-pressed="${activeCat===c.id}" onclick="${setterName}('${c.id}')">${c.id!=='todos'?`<span class="chip-dot" style="background:${c.color}"></span>`:''}${escapeHtml(c.name)}</button>`).join('');
 }
 function getSetupProductList({searchId,catId,reservableOnly=false}){
   const allowedCats=reservableOnly?new Set(cats.filter(c=>c.reservable).map(c=>c.id)):null;
@@ -4123,13 +4160,13 @@ function renderMesaSetupProductoGrid(){
   el.innerHTML=list.map(p=>{
     const productId=getProductFrontId(p);
     const qty=getCartQtyForProduct(mesaSetupCarrito,p),cat=getCat(p.cat),hasVars=(p.variantes||[]).length>0;
-    return `<div class="prod-card${qty>0?' in-cart':''}" data-product-id="${escapeAttr(productId)}">
-      <div class="cat-dot" style="background:${cat.color}"></div>
-      <div class="prod-name">${escapeHtml(p.name)}</div>
-      <div class="prod-price">${fmt(safeProductPrice(p))}</div>
-      ${hasVars?`<div class="prod-mods-hint">🔧 Variantes</div>`:''}
-      ${qty>0?`<div class="prod-badge">${qty}</div>`:''}
-    </div>`;
+    return `<button type="button" class="prod-card${qty>0?' in-cart':''}" data-product-id="${escapeAttr(productId)}" aria-pressed="${qty>0}">
+      <span class="cat-dot" style="background:${cat.color}"></span>
+      <span class="prod-name">${escapeHtml(p.name)}</span>
+      <span class="prod-price">${fmt(safeProductPrice(p))}</span>
+      ${hasVars?`<span class="prod-mods-hint">🔧 Variantes</span>`:''}
+      ${qty>0?`<span class="prod-badge">${qty}</span>`:''}
+    </button>`;
   }).join('');
   attachProductCardHandlers(el,'addItemMesaSetup');
   updateMesaSetupTotals();
